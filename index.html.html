@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A4画像シートメーカー iPhone URL版</title>
+  <style>
+    :root{
+      --bg:#f5f7fa;--panel:#fff;--line:#d7dde6;--text:#1f2937;--muted:#6b7280;--accent:#111827;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+      background:var(--bg);color:var(--text)
+    }
+    .wrap{
+      max-width:980px;margin:0 auto;padding:14px;display:grid;grid-template-columns:1fr;gap:14px
+    }
+    .panel{
+      background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;
+      box-shadow:0 8px 24px rgba(16,24,40,.05)
+    }
+    h1{margin:0 0 8px;font-size:22px;line-height:1.3}
+    .sub{margin:0 0 12px;font-size:13px;color:var(--muted);line-height:1.6}
+    .help,.status,.note{
+      border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.7;background:#fbfcfe
+    }
+    .status{background:#fff;color:var(--muted)}
+    .grid{display:grid;gap:12px}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
+    input[type="file"],select{
+      width:100%;border:1px solid var(--line);border-radius:14px;padding:14px 14px;font-size:16px;background:#fff;outline:none
+    }
+    button{
+      border:0;border-radius:14px;padding:14px 16px;font-size:16px;cursor:pointer;font-weight:700;background:var(--accent);color:#fff;
+      min-height:52px
+    }
+    button.secondary{background:#fff;color:var(--accent);border:1px solid var(--line)}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .btnRow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .nav{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center}
+    .pageInfo{font-size:14px;color:var(--muted);font-weight:700;text-align:center;grid-column:1 / -1}
+    .canvasWrap{
+      display:grid;place-items:center;background:#eef2f7;border:1px solid var(--line);border-radius:16px;overflow:hidden;padding:10px
+    }
+    #previewCanvas{max-width:100%;height:auto;background:#fff;box-shadow:0 6px 18px rgba(16,24,40,.08);border-radius:8px}
+    .thumbList{display:grid;gap:10px;max-height:none;overflow:visible}
+    .thumb{
+      display:grid;grid-template-columns:84px 1fr;gap:10px;align-items:start;
+      border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff
+    }
+    .thumb img{width:84px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb}
+    .thumbMeta{font-size:12px;line-height:1.5;color:var(--muted)}
+    .thumbMeta strong{color:var(--text)}
+    .checkline{display:flex;align-items:center;gap:8px;font-size:14px}
+    .thumbActions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .thumbBtn{
+      border:1px solid var(--line);background:#fff;color:var(--text);
+      border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:auto
+    }
+    .stickyBar{
+      position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px
+    }
+    @media (min-width:900px){
+      .wrap{grid-template-columns:360px 1fr}
+      .thumbList{max-height:420px;overflow:auto}
+      .pageInfo{grid-column:auto;text-align:right}
+      .nav{grid-template-columns:auto auto 1fr}
+    }
+    @media (max-width:480px){
+      .row2,.btnRow,.nav{grid-template-columns:1fr}
+      .pageInfo{grid-column:auto;text-align:center}
+      button{font-size:15px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="panel">
+      <h1>A4画像シートメーカー iPhone URL版</h1>
+      <p class="sub">iPhoneでのURL起動を前提にした版です。操作を大きくし、1タップで扱いやすい構成に寄せています。</p>
+
+      <div class="help">
+        使い方：<br>
+        ① URLから開く<br>
+        ② 画像を読み込む<br>
+        ③ A4向きと 1ページ1枚 / 2枚 を選ぶ<br>
+        ④ 必要なら画像ごとに90°回転する<br>
+        ⑤ プレビュー更新を押す<br>
+        ⑥ PDF保存 または JPEG保存（全ページ） を押す
+      </div>
+
+      <div class="grid" style="margin-top:12px;">
+        <div>
+          <label for="fileInput">画像読み込み（複数枚可）</label>
+          <input id="fileInput" type="file" accept="image/*" multiple />
+        </div>
+
+        <div class="row2">
+          <div>
+            <label for="orientation">A4向き</label>
+            <select id="orientation">
+              <option value="portrait" selected>縦向き</option>
+              <option value="landscape">横向き</option>
+            </select>
+          </div>
+          <div>
+            <label for="layout">配置枚数</label>
+            <select id="layout">
+              <option value="1">1枚</option>
+              <option value="2" selected>2枚</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="note">
+          <label class="checkline">
+            <input id="showDate" type="checkbox" checked />
+            撮影日を右下に表示する
+          </label>
+        </div>
+
+        <div class="stickyBar"><div class="btnRow">
+          <button id="btnRender" type="button">プレビュー更新</button>
+          <button id="btnPdf" type="button">PDF保存</button>
+          <button id="btnJpegAll" type="button">JPEG保存（全ページ）</button>
+          <button id="btnClear" class="secondary" type="button">画像クリア</button>
+        </div></div>
+
+        <div id="status" class="status">画像を読み込んでください。</div>
+
+        <div class="note">
+          URL起動用の版です。Edgeで開いたあと、ホーム画面やお気に入りに追加して使う前提です。<br>
+          読込時に長辺2000pxへ縮小し、軽量化します。撮影日はJPEGのEXIF優先、取れない場合はファイル更新日を表示します。
+        </div>
+
+        <div>
+          <label>読込画像</label>
+          <div id="thumbList" class="thumbList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="nav" style="margin-bottom:12px;">
+        <button id="btnPrev" class="secondary" type="button">前ページ</button>
+        <button id="btnNext" class="secondary" type="button">次ページ</button>
+        <div id="pageInfo" class="pageInfo">0 / 0 ページ</div>
+      </div>
+      <div class="canvasWrap">
+        <canvas id="previewCanvas" width="1240" height="1754"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const els = {
+      fileInput: document.getElementById('fileInput'),
+      orientation: document.getElementById('orientation'),
+      layout: document.getElementById('layout'),
+      showDate: document.getElementById('showDate'),
+      btnRender: document.getElementById('btnRender'),
+      btnPdf: document.getElementById('btnPdf'),
+      btnJpegAll: document.getElementById('btnJpegAll'),
+      btnClear: document.getElementById('btnClear'),
+      btnPrev: document.getElementById('btnPrev'),
+      btnNext: document.getElementById('btnNext'),
+      status: document.getElementById('status'),
+      pageInfo: document.getElementById('pageInfo'),
+      previewCanvas: document.getElementById('previewCanvas'),
+      thumbList: document.getElementById('thumbList')
+    };
+
+    const state = {
+      images: [],
+      pages: [],
+      currentPage: 0,
+      skipped: []
+    };
+
+    const FIXED = {
+      longEdge: 2000,
+      jpegQuality: 0.78,
+      margin: 60,
+      gap: 40,
+      dateFont: 22,
+      portrait: { width: 1240, height: 1754, pdfW: 595.28, pdfH: 841.89 },
+      landscape: { width: 1754, height: 1240, pdfW: 841.89, pdfH: 595.28 }
+    };
+
+    function setStatus(msg) { els.status.textContent = msg; }
+    function safeName(name) { return (name || '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[s])); }
+    function baseFileName() { return 'a4_image_sheet_fixed'; }
+    function getPerPage() { return Math.max(1, Number(els.layout.value) || 1); }
+    function getConfig() { return FIXED[els.orientation.value] || FIXED.portrait; }
+
+    function updatePageInfo() {
+      const total = state.pages.length;
+      els.pageInfo.textContent = total ? `${state.currentPage + 1} / ${total} ページ` : '0 / 0 ページ';
+      els.btnPrev.disabled = total <= 1 || state.currentPage <= 0;
+      els.btnNext.disabled = total <= 1 || state.currentPage >= total - 1;
+      els.btnPdf.disabled = !state.images.length;
+      els.btnJpegAll.disabled = !state.images.length;
+    }
+
+    function renderThumbs() {
+      if (!state.images.length) {
+        const skippedInfo = state.skipped.length
+          ? `<div class="status">読込失敗：${state.skipped.map(s => safeName(s.name)).join(' / ')}</div>`
+          : '';
+        els.thumbList.innerHTML = '<div class="status">まだ画像がありません。</div>' + skippedInfo;
+        return;
+      }
+      const perPage = getPerPage();
+      const skippedInfo = state.skipped.length
+        ? `<div class="status">読込失敗：${state.skipped.map(s => safeName(s.name)).join(' / ')}</div>`
+        : '';
+      els.thumbList.innerHTML = state.images.map((item, idx) => {
+        const page = Math.floor(idx / perPage) + 1;
+        const slot = (idx % perPage) + 1;
+        return `
+          <div class="thumb">
+            <img src="${item.thumbDataUrl}" alt="">
+            <div class="thumbMeta">
+              <div><strong>${safeName(item.name)}</strong></div>
+              <div>${item.width} × ${item.height}px</div>
+              <div>撮影日：${safeName(item.date)}</div>
+              <div>回転：${item.rotation || 0}°</div>
+              <div>ページ：${page} / 配置：${slot}</div>
+              <div class="thumbActions">
+                <button type="button" class="thumbBtn" data-rotate="left" data-index="${idx}">↺ 左90°</button>
+                <button type="button" class="thumbBtn" data-rotate="right" data-index="${idx}">↻ 右90°</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('') + skippedInfo;
+    }
+
+    function rebuildPages() {
+      const pages = [];
+      const perPage = getPerPage();
+      for (let i = 0; i < state.images.length; i += perPage) {
+        pages.push(state.images.slice(i, i + perPage));
+      }
+      state.pages = pages;
+      if (state.currentPage > pages.length - 1) state.currentPage = Math.max(0, pages.length - 1);
+    }
+
+    function readAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function readAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    function formatDateFromFile(file) {
+      const d = new Date(file.lastModified);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}/${m}/${day}`;
+    }
+
+    function getString(view, offset, length) {
+      let out = '';
+      for (let i = 0; i < length; i++) {
+        const c = view.getUint8(offset + i);
+        if (c === 0) break;
+        out += String.fromCharCode(c);
+      }
+      return out;
+    }
+
+    function parseExifDate(buffer) {
+      try {
+        const view = new DataView(buffer);
+        if (view.byteLength < 4 || view.getUint16(0, false) !== 0xFFD8) return '';
+        let offset = 2;
+        while (offset < view.byteLength) {
+          if (view.getUint8(offset) !== 0xFF) break;
+          const marker = view.getUint8(offset + 1);
+          if (marker === 0xDA || marker === 0xD9) break;
+          const size = view.getUint16(offset + 2, false);
+          if (marker === 0xE1) {
+            const exifStart = offset + 4;
+            if (getString(view, exifStart, 6) !== 'Exif\0\0') return '';
+            const tiff = exifStart + 6;
+            const little = view.getUint16(tiff, false) === 0x4949;
+            const get16 = (pos) => view.getUint16(pos, little);
+            const get32 = (pos) => view.getUint32(pos, little);
+
+            const firstIFD = tiff + get32(tiff + 4);
+            const count0 = get16(firstIFD);
+            let exifIFDOffset = 0;
+            let date0 = '';
+
+            for (let i = 0; i < count0; i++) {
+              const entry = firstIFD + 2 + i * 12;
+              const tag = get16(entry);
+              const type = get16(entry + 2);
+              const count = get32(entry + 4);
+              const valueOffset = get32(entry + 8);
+
+              if (tag === 0x8769) exifIFDOffset = valueOffset;
+              if (tag === 0x0132 && type === 2) {
+                const ptr = count <= 4 ? entry + 8 : tiff + valueOffset;
+                date0 = getString(view, ptr, count);
+              }
+            }
+
+            if (exifIFDOffset) {
+              const exifIFD = tiff + exifIFDOffset;
+              const exifCount = get16(exifIFD);
+              for (let i = 0; i < exifCount; i++) {
+                const entry = exifIFD + 2 + i * 12;
+                const tag = get16(entry);
+                const type = get16(entry + 2);
+                const count = get32(entry + 4);
+                const valueOffset = get32(entry + 8);
+                if ((tag === 0x9003 || tag === 0x9004) && type === 2) {
+                  const ptr = count <= 4 ? entry + 8 : tiff + valueOffset;
+                  const raw = getString(view, ptr, count);
+                  if (raw) return raw.slice(0, 10).replace(/:/g, '/');
+                }
+              }
+            }
+            if (date0) return date0.slice(0, 10).replace(/:/g, '/');
+            return '';
+          }
+          offset += 2 + size;
+        }
+      } catch (e) {
+        return '';
+      }
+      return '';
+    }
+
+
+    function makeThumbDataUrl(canvas) {
+      const maxSide = 160;
+      const ratio = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
+      const w = Math.max(1, Math.round(canvas.width * ratio));
+      const h = Math.max(1, Math.round(canvas.height * ratio));
+      const thumb = document.createElement('canvas');
+      thumb.width = w;
+      thumb.height = h;
+      const tctx = thumb.getContext('2d', { alpha: false });
+      tctx.fillStyle = '#ffffff';
+      tctx.fillRect(0, 0, w, h);
+      tctx.imageSmoothingEnabled = true;
+      tctx.imageSmoothingQuality = 'high';
+      tctx.drawImage(canvas, 0, 0, w, h);
+      return thumb.toDataURL('image/jpeg', 0.7);
+    }
+
+    function rotateCanvas(sourceCanvas, dir) {
+      const rotated = document.createElement('canvas');
+      const clockwise = dir === 'right';
+      rotated.width = sourceCanvas.height;
+      rotated.height = sourceCanvas.width;
+      const rctx = rotated.getContext('2d', { alpha: false });
+      rctx.fillStyle = '#ffffff';
+      rctx.fillRect(0, 0, rotated.width, rotated.height);
+      rctx.translate(rotated.width / 2, rotated.height / 2);
+      rctx.rotate((clockwise ? 90 : -90) * Math.PI / 180);
+      rctx.drawImage(sourceCanvas, -sourceCanvas.width / 2, -sourceCanvas.height / 2);
+      return rotated;
+    }
+
+    function rotateImageAt(index, dir) {
+      const item = state.images[index];
+      if (!item) return;
+      const rotatedCanvas = rotateCanvas(item.canvas, dir);
+      item.canvas = rotatedCanvas;
+      item.width = rotatedCanvas.width;
+      item.height = rotatedCanvas.height;
+      item.rotation = ((item.rotation || 0) + (dir === 'right' ? 90 : 270)) % 360;
+      item.thumbDataUrl = makeThumbDataUrl(rotatedCanvas);
+      render();
+      setStatus(`画像を回転しました：${item.name}`);
+    }
+
+    async function prepareImage(file) {
+      const lowerName = (file.name || '').toLowerCase();
+      const lowerType = (file.type || '').toLowerCase();
+      if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif') || lowerType.includes('heic') || lowerType.includes('heif')) {
+        throw new Error('HEIC/HEIFは未対応です');
+      }
+
+      const [dataUrl, buffer] = await Promise.all([readAsDataURL(file), readAsArrayBuffer(file)]);
+      const img = await loadImage(dataUrl);
+      const ratio = Math.min(1, FIXED.longEdge / Math.max(img.naturalWidth, img.naturalHeight));
+      const width = Math.max(1, Math.round(img.naturalWidth * ratio));
+      const height = Math.max(1, Math.round(img.naturalHeight * ratio));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      return {
+        name: file.name,
+        width,
+        height,
+        canvas,
+        thumbDataUrl: makeThumbDataUrl(canvas),
+        rotation: 0,
+        date: parseExifDate(buffer) || formatDateFromFile(file)
+      };
+    }
+
+    function getSingleBox(width, height) {
+      const m = FIXED.margin;
+      return { x: m, y: m, w: width - m * 2, h: height - m * 2 };
+    }
+
+    function getDoubleBoxes(width, height, orientation, items = []) {
+      const m = FIXED.margin;
+      const gap = FIXED.gap;
+
+      if (orientation === 'portrait') {
+        const fullW = width - m * 2;
+        const totalH = height - m * 2 - gap;
+
+        const itemA = items[0];
+        const itemB = items[1];
+
+        if (itemA && itemB) {
+          const idealH1 = fullW * (itemA.height / itemA.width);
+          const idealH2 = fullW * (itemB.height / itemB.width);
+          const ratioSum = idealH1 + idealH2 || 1;
+          let boxH1 = Math.round(totalH * (idealH1 / ratioSum));
+          let boxH2 = totalH - boxH1;
+
+          const minH = Math.round(totalH * 0.28);
+          if (boxH1 < minH) { boxH1 = minH; boxH2 = totalH - boxH1; }
+          if (boxH2 < minH) { boxH2 = minH; boxH1 = totalH - boxH2; }
+
+          return [
+            { x: m, y: m, w: fullW, h: boxH1 },
+            { x: m, y: m + boxH1 + gap, w: fullW, h: boxH2 }
+          ];
+        }
+
+        const boxH = Math.floor(totalH / 2);
+        return [
+          { x: m, y: m, w: fullW, h: boxH },
+          { x: m, y: m + boxH + gap, w: fullW, h: totalH - boxH }
+        ];
+      }
+
+      const fullH = height - m * 2;
+      const totalW = width - m * 2 - gap;
+
+      const itemA = items[0];
+      const itemB = items[1];
+
+      if (itemA && itemB) {
+        const idealW1 = fullH * (itemA.width / itemA.height);
+        const idealW2 = fullH * (itemB.width / itemB.height);
+        const ratioSum = idealW1 + idealW2 || 1;
+        let boxW1 = Math.round(totalW * (idealW1 / ratioSum));
+        let boxW2 = totalW - boxW1;
+
+        const minW = Math.round(totalW * 0.28);
+        if (boxW1 < minW) { boxW1 = minW; boxW2 = totalW - boxW1; }
+        if (boxW2 < minW) { boxW2 = minW; boxW1 = totalW - boxW2; }
+
+        return [
+          { x: m, y: m, w: boxW1, h: fullH },
+          { x: m + boxW1 + gap, y: m, w: boxW2, h: fullH }
+        ];
+      }
+
+      const boxW = Math.floor(totalW / 2);
+      return [
+        { x: m, y: m, w: boxW, h: fullH },
+        { x: m + boxW + gap, y: m, w: totalW - boxW, h: fullH }
+      ];
+    }
+
+    function drawDateLabel(ctx, text, rect, scale) {
+      if (!els.showDate.checked || !text) return;
+      const padX = 12 * scale;
+      const padY = 8 * scale;
+      const fontSize = FIXED.dateFont * scale;
+      ctx.font = `600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+      const textW = ctx.measureText(text).width;
+      const boxW = textW + padX * 2;
+      const boxH = fontSize + padY * 2;
+      const x = rect.dx + rect.dw - boxW - 12 * scale;
+      const y = rect.dy + rect.dh - boxH - 12 * scale;
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.fillRect(x, y, boxW, boxH);
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 1 * scale;
+      ctx.strokeRect(x, y, boxW, boxH);
+      ctx.fillStyle = '#111827';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + padX, y + boxH / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    function drawPlaceholder(ctx, box) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    }
+
+    function drawFitImage(ctx, item, box) {
+      const ir = item.width / item.height;
+      const br = box.w / box.h;
+      let dw, dh, dx, dy;
+      if (ir > br) {
+        dw = box.w;
+        dh = dw / ir;
+        dx = box.x;
+        dy = box.y + (box.h - dh) / 2;
+      } else {
+        dh = box.h;
+        dw = dh * ir;
+        dy = box.y;
+        dx = box.x + (box.w - dw) / 2;
+      }
+      ctx.drawImage(item.canvas, dx, dy, dw, dh);
+      return { dx, dy, dw, dh };
+    }
+
+    function drawPageToCanvas(canvas, pageIndex, scale) {
+      const cfg = getConfig();
+      canvas.width = Math.round(cfg.width * scale);
+      canvas.height = Math.round(cfg.height * scale);
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      const page = state.pages[pageIndex] || [];
+      const perPage = getPerPage();
+      const boxes = perPage === 1
+        ? [getSingleBox(canvas.width, canvas.height)]
+        : getDoubleBoxes(canvas.width, canvas.height, els.orientation.value, page);
+
+      boxes.forEach((box, idx) => {
+        const item = page[idx];
+        if (!item) {
+          drawPlaceholder(ctx, box);
+          return;
+        }
+        const rect = drawFitImage(ctx, item, box);
+        drawDateLabel(ctx, item.date, rect, scale);
+      });
+      return canvas;
+    }
+
+    function render() {
+      rebuildPages();
+      if (!state.pages.length) {
+        const canvas = els.previewCanvas;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const cfg = getConfig();
+        canvas.width = cfg.width;
+        canvas.height = cfg.height;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        updatePageInfo();
+        renderThumbs();
+        setStatus('画像を読み込んでください。');
+        return;
+      }
+      drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+      updatePageInfo();
+      renderThumbs();
+      setStatus(`プレビュー更新済み（画像${state.images.length}枚 / ${state.pages.length}ページ）`);
+    }
+
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1200);
+    }
+
+    function canvasToJpegBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) reject(new Error('JPEG生成失敗'));
+          else resolve(blob);
+        }, 'image/jpeg', FIXED.jpegQuality);
+      });
+    }
+
+    async function saveAllJpegs() {
+      try {
+        for (let i = 0; i < state.pages.length; i++) {
+          const canvas = document.createElement('canvas');
+          drawPageToCanvas(canvas, i, 1.5);
+          const blob = await canvasToJpegBlob(canvas);
+          triggerDownload(blob, `${baseFileName()}_${String(i + 1).padStart(2, '0')}.jpg`);
+          await new Promise(r => setTimeout(r, 180));
+        }
+        setStatus(`JPEG保存を開始しました（全${state.pages.length}ページ）`);
+      } catch (e) {
+        console.error(e);
+        setStatus('JPEG保存に失敗しました。');
+      }
+    }
+
+    function dataUrlToBytes(dataUrl) {
+      const base64 = dataUrl.split(',')[1];
+      const binary = atob(base64);
+      const arr = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+      return arr;
+    }
+
+    function strBytes(str) { return new TextEncoder().encode(str); }
+
+    function concatBytes(parts) {
+      const total = parts.reduce((sum, part) => sum + part.length, 0);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      parts.forEach((part) => {
+        merged.set(part, offset);
+        offset += part.length;
+      });
+      return merged;
+    }
+
+    function buildPdf(pageImages) {
+      const cfg = getConfig();
+      const objects = [];
+      objects[1] = strBytes('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+      const kids = [];
+      for (let i = 0; i < pageImages.length; i++) {
+        kids.push(`${3 + i * 3} 0 R`);
+      }
+      objects[2] = strBytes(`2 0 obj\n<< /Type /Pages /Count ${pageImages.length} /Kids [${kids.join(' ')}] >>\nendobj\n`);
+
+      for (let i = 0; i < pageImages.length; i++) {
+        const pageObj = 3 + i * 3;
+        const imgObj = 4 + i * 3;
+        const contentObj = 5 + i * 3;
+        const item = pageImages[i];
+        const content = `q\n${cfg.pdfW.toFixed(2)} 0 0 ${cfg.pdfH.toFixed(2)} 0 0 cm\n/Im0 Do\nQ`;
+
+        objects[pageObj] = strBytes(
+          `${pageObj} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${cfg.pdfW.toFixed(2)} ${cfg.pdfH.toFixed(2)}] /Resources << /XObject << /Im0 ${imgObj} 0 R >> >> /Contents ${contentObj} 0 R >>\nendobj\n`
+        );
+        objects[imgObj] = concatBytes([
+          strBytes(`${imgObj} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${item.width} /Height ${item.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${item.bytes.length} >>\nstream\n`),
+          item.bytes,
+          strBytes('\nendstream\nendobj\n')
+        ]);
+        objects[contentObj] = strBytes(`${contentObj} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+      }
+
+      const header = strBytes('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+      const parts = [header];
+      const offsets = [0];
+      let offset = header.length;
+      const maxObj = 2 + pageImages.length * 3;
+      for (let i = 1; i <= maxObj; i++) {
+        offsets[i] = offset;
+        parts.push(objects[i]);
+        offset += objects[i].length;
+      }
+      const xrefOffset = offset;
+      let xref = `xref\n0 ${maxObj + 1}\n0000000000 65535 f \n`;
+      for (let i = 1; i <= maxObj; i++) {
+        xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+      }
+      const trailer = `trailer\n<< /Size ${maxObj + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+      parts.push(strBytes(xref));
+      parts.push(strBytes(trailer));
+      return new Blob([concatBytes(parts)], { type: 'application/pdf' });
+    }
+
+    async function savePdf() {
+      try {
+        const pageImages = [];
+        for (let i = 0; i < state.pages.length; i++) {
+          const canvas = document.createElement('canvas');
+          drawPageToCanvas(canvas, i, 1.5);
+          const dataUrl = canvas.toDataURL('image/jpeg', FIXED.jpegQuality);
+          pageImages.push({
+            width: canvas.width,
+            height: canvas.height,
+            bytes: dataUrlToBytes(dataUrl)
+          });
+        }
+        const blob = buildPdf(pageImages);
+        triggerDownload(blob, `${baseFileName()}.pdf`);
+        setStatus(`PDFを保存しました（全${state.pages.length}ページ）`);
+      } catch (e) {
+        console.error(e);
+        setStatus('PDF保存に失敗しました。');
+      }
+    }
+
+    async function handleFiles(files) {
+      const list = Array.from(files || []);
+      if (!list.length) {
+        setStatus('画像が選択されていません。');
+        return;
+      }
+
+      setStatus(`画像を読み込み中です… 0 / ${list.length}`);
+      const loaded = [];
+      const skipped = [];
+
+      for (let i = 0; i < list.length; i++) {
+        try {
+          const prepared = await prepareImage(list[i]);
+          loaded.push(prepared);
+        } catch (e) {
+          console.error(e);
+          skipped.push({ name: list[i].name, reason: e && e.message ? e.message : '読込失敗' });
+        }
+        setStatus(`画像を読み込み中です… ${i + 1} / ${list.length}`);
+      }
+
+      state.images = loaded;
+      state.skipped = skipped;
+      state.currentPage = 0;
+      render();
+
+      if (!loaded.length) {
+        setStatus('画像読込に失敗しました。対応形式の画像を選んでください。');
+      } else if (skipped.length) {
+        setStatus(`読込完了：${loaded.length}枚 / スキップ：${skipped.length}枚`);
+      } else {
+        setStatus(`読込完了：${loaded.length}枚`);
+      }
+    }
+
+    function clearAll() {
+      state.images = [];
+      state.pages = [];
+      state.skipped = [];
+      state.currentPage = 0;
+      els.fileInput.value = '';
+      render();
+      setStatus('画像をクリアしました。');
+    }
+
+    els.fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    els.thumbList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-rotate]');
+      if (!btn) return;
+      const index = Number(btn.dataset.index);
+      const dir = btn.dataset.rotate;
+      rotateImageAt(index, dir);
+    });
+    els.btnRender.addEventListener('click', render);
+    els.btnClear.addEventListener('click', clearAll);
+    els.btnJpegAll.addEventListener('click', saveAllJpegs);
+    els.btnPdf.addEventListener('click', savePdf);
+    els.btnPrev.addEventListener('click', () => {
+      if (state.currentPage > 0) {
+        state.currentPage -= 1;
+        render();
+      }
+    });
+    els.btnNext.addEventListener('click', () => {
+      if (state.currentPage < state.pages.length - 1) {
+        state.currentPage += 1;
+        render();
+      }
+    });
+    [els.orientation, els.layout, els.showDate].forEach((el) => {
+      el.addEventListener('change', () => {
+        state.currentPage = 0;
+        render();
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>
