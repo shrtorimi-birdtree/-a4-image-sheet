@@ -304,25 +304,31 @@
         if (view.byteLength < 4 || view.getUint16(0, false) !== 0xFFD8) return '';
         let offset = 2;
         while (offset < view.byteLength) {
+          if (offset + 4 > view.byteLength) break;
           if (view.getUint8(offset) !== 0xFF) break;
           const marker = view.getUint8(offset + 1);
           if (marker === 0xDA || marker === 0xD9) break;
           const size = view.getUint16(offset + 2, false);
+          if (size < 2 || offset + 2 + size > view.byteLength) break;
           if (marker === 0xE1) {
             const exifStart = offset + 4;
+            if (exifStart + 6 > view.byteLength) return '';
             if (getString(view, exifStart, 6) !== 'Exif\0\0') return '';
             const tiff = exifStart + 6;
+            if (tiff + 8 > view.byteLength) return '';
             const little = view.getUint16(tiff, false) === 0x4949;
             const get16 = (pos) => view.getUint16(pos, little);
             const get32 = (pos) => view.getUint32(pos, little);
 
             const firstIFD = tiff + get32(tiff + 4);
+            if (firstIFD + 2 > view.byteLength) return '';
             const count0 = get16(firstIFD);
             let exifIFDOffset = 0;
             let date0 = '';
 
             for (let i = 0; i < count0; i++) {
               const entry = firstIFD + 2 + i * 12;
+              if (entry + 12 > view.byteLength) break;
               const tag = get16(entry);
               const type = get16(entry + 2);
               const count = get32(entry + 4);
@@ -337,9 +343,11 @@
 
             if (exifIFDOffset) {
               const exifIFD = tiff + exifIFDOffset;
+              if (exifIFD + 2 > view.byteLength) return '';
               const exifCount = get16(exifIFD);
               for (let i = 0; i < exifCount; i++) {
                 const entry = exifIFD + 2 + i * 12;
+                if (entry + 12 > view.byteLength) break;
                 const tag = get16(entry);
                 const type = get16(entry + 2);
                 const count = get32(entry + 4);
