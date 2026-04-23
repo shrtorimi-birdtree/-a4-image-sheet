@@ -627,6 +627,33 @@
       setTimeout(() => URL.revokeObjectURL(url), 1200);
     }
 
+    function isShareCancelled(err) {
+      if (!err) return false;
+      return err.name === 'AbortError' || err.name === 'NotAllowedError';
+    }
+
+    async function shareFileOrFallback(file, fallbackMessage) {
+      const canUseShareApi = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+      const canUseCanShare = canUseShareApi && typeof navigator.canShare === 'function';
+      const canShareFiles = canUseCanShare && navigator.canShare({ files: [file] });
+
+      if (canUseShareApi && canShareFiles) {
+        await navigator.share({
+          files: [file],
+          title: file.name
+        });
+        return { shared: true, fallback: false };
+      }
+
+      const blobUrl = URL.createObjectURL(file);
+      const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        triggerDownload(file, file.name);
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+      return { shared: false, fallback: true, message: fallbackMessage };
+    }
+
     function canvasToJpegBlob(canvas) {
       return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -655,9 +682,19 @@
         const canvas = document.createElement('canvas');
         drawPageToCanvas(canvas, state.currentPage, 1.5);
         const blob = await canvasToJpegBlob(canvas);
-        triggerDownload(blob, `${baseFileName()}_${String(state.currentPage + 1).padStart(2, '0')}.jpg`);
-        setStatus(`JPEGを保存しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
+        const filename = `${baseFileName()}_${String(state.currentPage + 1).padStart(2, '0')}.jpg`;
+        const file = new File([blob], filename, { type: 'image/jpeg' });
+        const result = await shareFileOrFallback(file, `JPEGを表示しました。必要に応じて保存してください（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
+        if (result.shared) {
+          setStatus(`JPEGを共有しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
+          return;
+        }
+        setStatus(result.message || `JPEGを保存しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
       } catch (e) {
+        if (isShareCancelled(e)) {
+          setStatus('共有をキャンセルしました。');
+          return;
+        }
         console.error(e);
         setStatus('JPEG保存に失敗しました。');
       }
@@ -735,6 +772,10 @@
 
     async function savePdf() {
       try {
+        if (!state.pages.length) {
+          setStatus('画像を読み込んでください。');
+          return;
+        }
         const pageImages = [];
         for (let i = 0; i < state.pages.length; i++) {
           const canvas = document.createElement('canvas');
@@ -747,9 +788,19 @@
           });
         }
         const blob = buildPdf(pageImages);
-        triggerDownload(blob, `${baseFileName()}.pdf`);
-        setStatus(`PDFを保存しました（全${state.pages.length}ページ）`);
+        const filename = `${baseFileName()}.pdf`;
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        const result = await shareFileOrFallback(file, `PDFを表示しました。必要に応じて保存してください（全${state.pages.length}ページ）`);
+        if (result.shared) {
+          setStatus('PDFを共有しました');
+          return;
+        }
+        setStatus(result.message || `PDFを保存しました（全${state.pages.length}ページ）`);
       } catch (e) {
+        if (isShareCancelled(e)) {
+          setStatus('共有をキャンセルしました。');
+          return;
+        }
         console.error(e);
         setStatus('PDF保存に失敗しました。');
       }
