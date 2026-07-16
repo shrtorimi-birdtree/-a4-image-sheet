@@ -270,7 +270,7 @@
         <label for="annotationText">テキストボックスの内容</label>
         <input id="annotationText" type="text" maxlength="40" placeholder="例：ここを確認" />
       </div>
-      <p id="annotationHelp" class="sub">矢印は始点から先端へドラッグします。図形を削除するには、図形を直接タップして選択してください。</p>
+      <p id="annotationHelp" class="sub">矢印は始点から先端へドラッグします。既存の図形は直接タップして選択し、そのままドラッグで移動できます。</p>
       <div class="editorCanvasWrap">
         <canvas id="annotationCanvas" width="1" height="1"></canvas>
       </div>
@@ -331,6 +331,11 @@
       selectedIndex: -1,
       draft: null,
       drawing: false,
+      moving: false,
+      moveStarted: false,
+      moveStart: null,
+      moveOriginal: null,
+      moveSnapshot: null,
       pointerId: null,
       triggerElement: null
     };
@@ -1340,15 +1345,15 @@
         : annotationEditor.tool === 'circle'
           ? '囲みたい範囲の端から端へドラッグしてください。'
           : '矢印は始点から先端へドラッグしてください。';
-      els.annotationHelp.textContent = `${drawingHelp} 図形を削除するには、図形を直接タップして選択してください。`;
+      els.annotationHelp.textContent = `${drawingHelp} 既存の図形は直接タップして選択し、そのままドラッグで移動できます。`;
     }
 
     function cloneAnnotations(annotations) {
       return annotations.map((annotation) => ({ ...annotation }));
     }
 
-    function pushAnnotationHistory() {
-      annotationEditor.history.push(cloneAnnotations(annotationEditor.annotations));
+    function pushAnnotationHistory(annotations = annotationEditor.annotations) {
+      annotationEditor.history.push(cloneAnnotations(annotations));
       if (annotationEditor.history.length > 30) annotationEditor.history.shift();
     }
 
@@ -1359,7 +1364,7 @@
       return '矢印';
     }
 
-    function selectAnnotationAt(point) {
+    function findAnnotationAt(point) {
       const canvas = els.annotationCanvas;
       const displayRect = canvas.getBoundingClientRect();
       const scale = Math.max(0.001, Math.min(displayRect.width / canvas.width, displayRect.height / canvas.height));
@@ -1368,17 +1373,20 @@
       const py = point.y * canvas.height;
       const rect = { dx: 0, dy: 0, dw: canvas.width, dh: canvas.height };
       const ctx = canvas.getContext('2d', { alpha: false });
-      annotationEditor.selectedIndex = -1;
       for (let index = annotationEditor.annotations.length - 1; index >= 0; index--) {
         if (annotationHitTest(ctx, annotationEditor.annotations[index], rect, px, py, tolerance)) {
-          annotationEditor.selectedIndex = index;
-          break;
+          return index;
         }
       }
+      return -1;
+    }
+
+    function selectAnnotationAt(point) {
+      annotationEditor.selectedIndex = findAnnotationAt(point);
       const selected = annotationEditor.annotations[annotationEditor.selectedIndex];
       els.annotationHelp.textContent = selected
-        ? `「${annotationTypeLabel(selected)}」を選択しました。「選択した図形を削除」で削除できます。`
-        : '図形が選択されていません。削除したい図形を直接タップしてください。';
+        ? `「${annotationTypeLabel(selected)}」を選択しました。ドラッグで移動するか、「選択した図形を削除」で削除できます。`
+        : '図形が選択されていません。移動または削除したい図形を直接タップしてください。';
     }
 
     function renderAnnotationEditor() {
@@ -1413,6 +1421,11 @@
       annotationEditor.selectedIndex = -1;
       annotationEditor.draft = null;
       annotationEditor.drawing = false;
+      annotationEditor.moving = false;
+      annotationEditor.moveStarted = false;
+      annotationEditor.moveStart = null;
+      annotationEditor.moveOriginal = null;
+      annotationEditor.moveSnapshot = null;
       annotationEditor.pointerId = null;
       els.annotationFileName.textContent = item.name;
       els.annotationText.value = '';
@@ -1443,6 +1456,11 @@
       annotationEditor.selectedIndex = -1;
       annotationEditor.draft = null;
       annotationEditor.drawing = false;
+      annotationEditor.moving = false;
+      annotationEditor.moveStarted = false;
+      annotationEditor.moveStart = null;
+      annotationEditor.moveOriginal = null;
+      annotationEditor.moveSnapshot = null;
       annotationEditor.pointerId = null;
       annotationEditor.triggerElement = null;
       els.annotationModal.hidden = true;
@@ -1470,10 +1488,27 @@
 
     function startAnnotation(event) {
       if (annotationEditor.imageIndex < 0 || !event.isPrimary) return;
-      const calloutText = els.annotationText.value.trim();
       const point = getAnnotationPoint(event);
-      annotationEditor.drawing = true;
+      const hitIndex = findAnnotationAt(point);
       annotationEditor.pointerId = event.pointerId;
+      if (hitIndex >= 0) {
+        annotationEditor.selectedIndex = hitIndex;
+        annotationEditor.drawing = false;
+        annotationEditor.draft = null;
+        annotationEditor.moving = true;
+        annotationEditor.moveStarted = false;
+        annotationEditor.moveStart = point;
+        annotationEditor.moveOriginal = { ...annotationEditor.annotations[hitIndex] };
+        annotationEditor.moveSnapshot = cloneAnnotations(annotationEditor.annotations);
+        els.annotationHelp.textContent = `「${annotationTypeLabel(annotationEditor.moveOriginal)}」を選択しました。そのままドラッグして移動できます。`;
+        if (els.annotationCanvas.setPointerCapture) els.annotationCanvas.setPointerCapture(event.pointerId);
+        renderAnnotationEditor();
+        return;
+      }
+      const calloutText = els.annotationText.value.trim();
+      annotationEditor.selectedIndex = -1;
+      annotationEditor.drawing = true;
+      annotationEditor.moving = false;
       annotationEditor.draft = {
         type: annotationEditor.tool,
         x1: point.x,
@@ -1486,16 +1521,79 @@
       renderAnnotationEditor();
     }
 
+    function translateAnnotationWithinImage(original, start, point) {
+      const minX = Math.min(original.x1, original.x2);
+      const maxX = Math.max(original.x1, original.x2);
+      const minY = Math.min(original.y1, original.y2);
+      const maxY = Math.max(original.y1, original.y2);
+      const dx = Math.max(-minX, Math.min(1 - maxX, point.x - start.x));
+      const dy = Math.max(-minY, Math.min(1 - maxY, point.y - start.y));
+      return {
+        ...original,
+        x1: original.x1 + dx,
+        y1: original.y1 + dy,
+        x2: original.x2 + dx,
+        y2: original.y2 + dy
+      };
+    }
+
+    function updateAnnotationMove(point) {
+      const original = annotationEditor.moveOriginal;
+      const start = annotationEditor.moveStart;
+      const index = annotationEditor.selectedIndex;
+      if (!original || !start || !annotationEditor.annotations[index]) return;
+      const canvasRect = els.annotationCanvas.getBoundingClientRect();
+      const distance = Math.hypot(
+        (point.x - start.x) * canvasRect.width,
+        (point.y - start.y) * canvasRect.height
+      );
+      if (!annotationEditor.moveStarted && distance < 4) return;
+      annotationEditor.moveStarted = true;
+      annotationEditor.annotations[index] = translateAnnotationWithinImage(original, start, point);
+      els.annotationHelp.textContent = `「${annotationTypeLabel(original)}」を移動しています。`;
+    }
+
+    function resetAnnotationMove() {
+      annotationEditor.moving = false;
+      annotationEditor.moveStarted = false;
+      annotationEditor.moveStart = null;
+      annotationEditor.moveOriginal = null;
+      annotationEditor.moveSnapshot = null;
+      annotationEditor.pointerId = null;
+    }
+
     function moveAnnotation(event) {
-      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      if (event.pointerId !== annotationEditor.pointerId) return;
       const point = getAnnotationPoint(event);
+      if (annotationEditor.moving) {
+        updateAnnotationMove(point);
+        renderAnnotationEditor();
+        return;
+      }
+      if (!annotationEditor.drawing) return;
       annotationEditor.draft.x2 = point.x;
       annotationEditor.draft.y2 = point.y;
       renderAnnotationEditor();
     }
 
     function finishAnnotation(event) {
-      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      if (event.pointerId !== annotationEditor.pointerId) return;
+      if (annotationEditor.moving) {
+        updateAnnotationMove(getAnnotationPoint(event));
+        const moved = annotationEditor.moveStarted;
+        const snapshot = annotationEditor.moveSnapshot;
+        const selected = annotationEditor.annotations[annotationEditor.selectedIndex];
+        if (moved && snapshot) pushAnnotationHistory(snapshot);
+        resetAnnotationMove();
+        els.annotationHelp.textContent = selected
+          ? moved
+            ? `「${annotationTypeLabel(selected)}」を移動しました。「1つ戻す」で元の位置に戻せます。`
+            : `「${annotationTypeLabel(selected)}」を選択しました。ドラッグで移動するか、「選択した図形を削除」で削除できます。`
+          : '';
+        renderAnnotationEditor();
+        return;
+      }
+      if (!annotationEditor.drawing) return;
       const draft = annotationEditor.draft;
       const point = getAnnotationPoint(event);
       draft.x2 = point.x;
@@ -1522,11 +1620,21 @@
       pushAnnotationHistory();
       annotationEditor.annotations.push(draft);
       annotationEditor.selectedIndex = annotationEditor.annotations.length - 1;
+      els.annotationHelp.textContent = `「${annotationTypeLabel(draft)}」を追加しました。図形上をドラッグすると移動できます。`;
       renderAnnotationEditor();
     }
 
     function cancelAnnotation(event) {
-      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      if (event.pointerId !== annotationEditor.pointerId) return;
+      if (annotationEditor.moving) {
+        if (annotationEditor.moveStarted && annotationEditor.moveSnapshot) {
+          annotationEditor.annotations = cloneAnnotations(annotationEditor.moveSnapshot);
+        }
+        resetAnnotationMove();
+        renderAnnotationEditor();
+        return;
+      }
+      if (!annotationEditor.drawing) return;
       annotationEditor.draft = null;
       annotationEditor.drawing = false;
       annotationEditor.pointerId = null;
