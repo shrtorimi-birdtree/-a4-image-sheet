@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A4画像シートメーカー iPhone版</title>
+  <title>A4画像シートメーカー</title>
   <style>
     :root{
-      --bg:#f5f7fa;--panel:#fff;--line:#d7dde6;--text:#1f2937;--muted:#6b7280;--accent:#111827;
+      --bg:#f5f7fa;--panel:#fff;--line:#c7cfda;--text:#1f2937;--muted:#6b7280;--accent:#111827;
     }
     *{box-sizing:border-box}
     body{
@@ -15,30 +15,38 @@
       background:var(--bg);color:var(--text)
     }
     .wrap{
-      max-width:980px;margin:0 auto;padding:14px;display:grid;grid-template-columns:1fr;gap:14px
+      max-width:1280px;margin:0 auto;padding:14px;display:grid;grid-template-columns:1fr;gap:14px
     }
     .panel{
       background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;
       box-shadow:0 8px 24px rgba(16,24,40,.05)
     }
     h1{margin:0 0 8px;font-size:22px;line-height:1.3}
+    h2{margin:0 0 6px;font-size:18px;line-height:1.35}
     .sub{margin:0 0 12px;font-size:13px;color:var(--muted);line-height:1.6}
     .help,.status,.note{
       border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.7;background:#fbfcfe
     }
-    .status{background:#fff;color:var(--muted)}
+    .status{background:#fff;color:var(--muted);transition:opacity .18s ease,visibility .18s ease}
+    .status.success{border-color:#86c89a;background:#f1fbf4;color:#17612d}
+    .status.warning{border-color:#e8c774;background:#fff9e8;color:#72520a}
+    .status.error{border-color:#e5a2a8;background:#fff3f4;color:#8f1d2c}
     .grid{display:grid;gap:12px}
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
     input[type="file"],input[type="text"],select{
-      width:100%;border:1px solid var(--line);border-radius:14px;padding:14px 14px;font-size:16px;background:#fff;outline:none
+      width:100%;border:1px solid var(--line);border-radius:14px;padding:14px 14px;font-size:16px;background:#fff
     }
     button{
       border:0;border-radius:14px;padding:14px 16px;font-size:16px;cursor:pointer;font-weight:700;background:var(--accent);color:#fff;
       min-height:52px
     }
     button.secondary{background:#fff;color:var(--accent);border:1px solid var(--line)}
+    button.danger{background:#fff;color:#a11624;border:1px solid #e6a8ae}
     button:disabled{opacity:.45;cursor:not-allowed}
+    input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{
+      outline:3px solid #2563eb;outline-offset:2px
+    }
     .btnRow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .nav{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center}
     .pageInfo{font-size:14px;color:var(--muted);font-weight:700;text-align:center;grid-column:1 / -1}
@@ -51,48 +59,110 @@
       display:grid;grid-template-columns:84px 1fr;gap:10px;align-items:start;
       border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff
     }
+    .thumb.currentPage{border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.16)}
     .thumb img{width:84px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb}
     .thumbMeta{font-size:12px;line-height:1.5;color:var(--muted)}
     .thumbMeta strong{color:var(--text)}
+    .thumbMeta input.thumbTitle{
+      width:100%;margin-top:4px;border:1px solid var(--line);border-radius:9px;
+      padding:10px 12px;font-size:16px;background:#fff
+    }
     .checkline{display:flex;align-items:center;gap:8px;font-size:14px}
-    .thumbActions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .thumbActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .thumbActions .wide{grid-column:1 / -1}
+    .thumbManage{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb}
     .thumbBtn{
       border:1px solid var(--line);background:#fff;color:var(--text);
-      border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:auto
+      border-radius:10px;padding:10px 12px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px
     }
-    .stickyBar{
-      position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px
+    .thumbBtn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .controlsPanel{grid-area:controls}
+    .previewPanel{grid-area:preview;min-width:0}
+    .imagesPanel{grid-area:images}
+    .savePanel{grid-area:save}
+    .imagesHead{display:flex;align-items:start;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .imagesHead .sub{margin:0}
+    .detailsNote summary{cursor:pointer;font-weight:700;color:var(--text)}
+    .detailsNote p{margin:8px 0 0}
+    .modal{
+      position:fixed;inset:0;z-index:20;background:rgba(17,24,39,.72);padding:16px;
+      display:grid;place-items:center
     }
+    .modalCard{
+      width:min(920px,100%);max-height:calc(100vh - 32px);overflow:auto;background:#fff;
+      border-radius:18px;padding:16px;box-shadow:0 24px 60px rgba(0,0,0,.28)
+    }
+    .modalHead{display:flex;align-items:start;justify-content:space-between;gap:12px}
+    .modalHead h2{font-size:20px;margin:0 0 4px}
+    .modalHead .sub{margin-bottom:10px}
+    .modalClose{min-height:44px;padding:8px 12px;white-space:nowrap}
+    .annotationToolbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+    .annotationToolGroup,.annotationActionGroup{display:flex;gap:8px;flex-wrap:wrap}
+    .annotationToolbar button{min-height:44px;padding:10px 14px;font-size:14px}
+    .annotationTool[aria-pressed="true"]{background:#b91c1c;color:#fff;border-color:#b91c1c}
+    .annotationTextField{margin:0 0 10px}
+    .annotationTextField input{padding:11px 12px}
+    .editorCanvasWrap{
+      display:grid;place-items:center;background:#e5e7eb;border:1px solid var(--line);
+      border-radius:14px;padding:8px;min-height:220px
+    }
+    #annotationCanvas{
+      display:block;max-width:100%;max-height:58vh;width:auto;height:auto;background:#fff;
+      box-shadow:0 4px 14px rgba(16,24,40,.12);touch-action:none;cursor:crosshair
+    }
+    .modalActions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    body.modalOpen{overflow:hidden}
+    [hidden]{display:none!important}
     @media (min-width:900px){
-      .wrap{grid-template-columns:360px 1fr}
+      .wrap{
+        grid-template-columns:380px minmax(0,1fr);
+        grid-template-areas:"controls preview" "images preview" "save preview";
+        align-items:start
+      }
       .thumbList{max-height:420px;overflow:auto}
       .pageInfo{grid-column:auto;text-align:right}
       .nav{grid-template-columns:auto auto 1fr}
+      .previewPanel{position:sticky;top:14px}
+    }
+    @media (max-width:899px){
+      body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+      .wrap{grid-template-areas:"controls" "preview" "images" "save"}
+      .savePanel{
+        position:fixed;left:0;right:0;bottom:0;z-index:10;border-radius:18px 18px 0 0;
+        padding:10px 14px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 28px rgba(16,24,40,.16)
+      }
+      .savePanel button{font-size:14px;padding:10px 8px}
+      #status{
+        position:fixed;left:14px;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:11;
+        box-shadow:0 8px 24px rgba(16,24,40,.16);pointer-events:none
+      }
+      #status:not(.show){opacity:0;visibility:hidden}
     }
     @media (max-width:480px){
-      .row2,.btnRow,.nav{grid-template-columns:1fr}
-      .pageInfo{grid-column:auto;text-align:center}
+      .row2{grid-template-columns:1fr}
+      .nav{grid-template-columns:1fr 1fr}
+      .pageInfo{grid-column:1 / -1;text-align:center}
       button{font-size:15px}
     }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <section class="panel">
-      <h1>A4画像シートメーカー iPhone版</h1>
-      <p class="sub">iPhone向けのURL版です。読み込み後や設定変更後は自動でプレビュー反映します。</p>
+    <section class="panel controlsPanel">
+      <h1>A4画像シートメーカー</h1>
+      <p class="sub">画像をA4用紙に配置し、PDFまたはJPEGで保存できます。読み込み後や設定変更後は自動でプレビューに反映します。</p>
 
       <div class="help">
         使い方：<br>
         ① 画像を読み込む<br>
-        ② A4向きと 1ページ1枚 / 2枚 を選ぶ<br>
-        ③ 必要なら画像ごとに90°回転する<br>
+        ② A4向き・配置枚数・保存画質を選ぶ<br>
+        ③ 必要なら画像ごとにタイトル・回転・注釈を加える<br>
         ④ PDF保存（全ページ） または JPEG保存（表示中ページ） を押す
       </div>
 
       <div class="grid" style="margin-top:12px;">
         <div>
-          <label for="fileInput">画像読み込み（複数枚可）</label>
+          <label for="fileInput">画像を追加（複数枚可）</label>
           <input id="fileInput" type="file" accept="image/*" multiple />
         </div>
 
@@ -113,6 +183,15 @@
           </div>
         </div>
 
+        <div>
+          <label for="jpegQuality">保存時の画像圧縮</label>
+          <select id="jpegQuality">
+            <option value="0.92">高画質（圧縮弱・容量大）</option>
+            <option value="0.78" selected>標準</option>
+            <option value="0.62">小容量（圧縮強・容量小）</option>
+          </select>
+        </div>
+
         <div class="note">
           <label class="checkline">
             <input id="showDate" type="checkbox" checked />
@@ -122,30 +201,21 @@
 
         <div>
           <label for="fileName">保存ファイル名</label>
-          <input id="fileName" type="text" value="a4_image_sheet_iphone" maxlength="60" />
+          <input id="fileName" type="text" value="a4_image_sheet" maxlength="60" />
         </div>
 
-        <div class="stickyBar"><div class="btnRow">
-          <button id="btnPdf" type="button">PDF保存（全ページ）</button>
-          <button id="btnJpegAll" type="button">JPEG保存（表示中ページ）</button>
-          <button id="btnClear" class="secondary" type="button">画像クリア</button>
-        </div></div>
+        <div id="status" class="status" role="status" aria-live="polite">画像を追加してください。</div>
 
-        <div id="status" class="status">画像を読み込んでください。</div>
-
-        <div class="note">
-          URL起動用の版です。Edgeで開いたあと、ホーム画面やお気に入りに追加して使う前提です。<br>
-          読込時に長辺2000pxへ縮小し、軽量化します。撮影日はJPEGのEXIF優先、取れない場合はファイル更新日を表示します。保存ファイル名は自由に変更できます。保存ファイル名は自由に変更できます。
-        </div>
-
-        <div>
-          <label>読込画像</label>
-          <div id="thumbList" class="thumbList"></div>
-        </div>
+        <details class="note detailsNote">
+          <summary>対応形式と保存について</summary>
+          <p>JPEG・PNG・WebPなどを利用できます。HEIC／HEIFは対応ブラウザで読み込めます。読み込めない場合はJPEGへ変換してください。</p>
+          <p>読込時に長辺2000pxへ縮小して処理します。画像圧縮はPDFとJPEGの両方に反映されます。撮影日は画像内の情報を優先し、取得できない場合はファイル更新日を表示します。</p>
+        </details>
       </div>
     </section>
 
-    <section class="panel">
+    <section id="previewPanel" class="panel previewPanel" aria-labelledby="previewHeading">
+      <h2 id="previewHeading">A4プレビュー</h2>
       <div class="nav" style="margin-bottom:12px;">
         <button id="btnPrev" class="secondary" type="button">前ページ</button>
         <button id="btnNext" class="secondary" type="button">次ページ</button>
@@ -155,6 +225,59 @@
         <canvas id="previewCanvas" width="1240" height="1754"></canvas>
       </div>
     </section>
+
+    <section class="panel imagesPanel" aria-labelledby="imagesHeading">
+      <div class="imagesHead">
+        <div>
+          <h2 id="imagesHeading">画像編集</h2>
+          <p class="sub">タイトル・回転・注釈を画像ごとに設定できます。</p>
+        </div>
+      </div>
+      <div id="thumbList" class="thumbList"></div>
+      <button id="btnClear" class="danger" type="button" style="width:100%;margin-top:12px;">すべての画像を削除</button>
+    </section>
+
+    <section class="panel savePanel" aria-label="保存">
+      <div class="btnRow">
+        <button id="btnPdf" type="button">PDF保存（全ページ）</button>
+        <button id="btnJpegCurrent" class="secondary" type="button">JPEG保存（表示中ページ）</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="annotationModal" class="modal" hidden>
+    <section class="modalCard" role="dialog" aria-modal="true" aria-labelledby="annotationTitle">
+      <div class="modalHead">
+        <div>
+          <h2 id="annotationTitle">注釈を編集</h2>
+          <p id="annotationFileName" class="sub"></p>
+        </div>
+        <button id="btnAnnotationClose" type="button" class="secondary modalClose" aria-label="注釈編集を閉じる">× 閉じる</button>
+      </div>
+      <div class="annotationToolbar" aria-label="注釈ツール">
+        <div class="annotationToolGroup" aria-label="描画ツール">
+          <button type="button" class="secondary annotationTool" data-annotation-tool="arrow" aria-pressed="true">矢印</button>
+          <button type="button" class="secondary annotationTool" data-annotation-tool="circle" aria-pressed="false">丸印</button>
+          <button type="button" class="secondary annotationTool" data-annotation-tool="callout" aria-pressed="false">矢印＋テキスト</button>
+        </div>
+        <div class="annotationActionGroup" aria-label="編集操作">
+          <button id="btnAnnotationUndo" type="button" class="secondary">1つ戻す</button>
+          <button id="btnAnnotationClear" type="button" class="danger">すべて消す</button>
+        </div>
+      </div>
+      <div id="annotationTextWrap" class="annotationTextField" hidden>
+        <label for="annotationText">テキストボックスの内容</label>
+        <input id="annotationText" type="text" maxlength="40" placeholder="例：ここを確認" />
+      </div>
+      <p id="annotationHelp" class="sub">矢印は始点から先端へドラッグしてください。</p>
+      <div class="editorCanvasWrap">
+        <canvas id="annotationCanvas" width="1" height="1"></canvas>
+      </div>
+      <div class="modalActions">
+        <button id="btnAnnotationCancel" type="button" class="secondary">キャンセル</button>
+        <button id="btnAnnotationDone" type="button">注釈を反映</button>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -162,85 +285,136 @@
       fileInput: document.getElementById('fileInput'),
       orientation: document.getElementById('orientation'),
       layout: document.getElementById('layout'),
+      jpegQuality: document.getElementById('jpegQuality'),
       fileName: document.getElementById('fileName'),
       showDate: document.getElementById('showDate'),
       btnPdf: document.getElementById('btnPdf'),
-      btnJpegAll: document.getElementById('btnJpegAll'),
+      btnJpegCurrent: document.getElementById('btnJpegCurrent'),
       btnClear: document.getElementById('btnClear'),
       btnPrev: document.getElementById('btnPrev'),
       btnNext: document.getElementById('btnNext'),
       status: document.getElementById('status'),
       pageInfo: document.getElementById('pageInfo'),
+      previewPanel: document.getElementById('previewPanel'),
       previewCanvas: document.getElementById('previewCanvas'),
-      thumbList: document.getElementById('thumbList')
+      thumbList: document.getElementById('thumbList'),
+      annotationModal: document.getElementById('annotationModal'),
+      annotationFileName: document.getElementById('annotationFileName'),
+      annotationCanvas: document.getElementById('annotationCanvas'),
+      annotationTools: Array.from(document.querySelectorAll('[data-annotation-tool]')),
+      annotationTextWrap: document.getElementById('annotationTextWrap'),
+      annotationText: document.getElementById('annotationText'),
+      annotationHelp: document.getElementById('annotationHelp'),
+      btnAnnotationUndo: document.getElementById('btnAnnotationUndo'),
+      btnAnnotationClear: document.getElementById('btnAnnotationClear'),
+      btnAnnotationClose: document.getElementById('btnAnnotationClose'),
+      btnAnnotationCancel: document.getElementById('btnAnnotationCancel'),
+      btnAnnotationDone: document.getElementById('btnAnnotationDone')
     };
 
     const state = {
       images: [],
       pages: [],
       currentPage: 0,
-      skipped: []
+      skipped: [],
+      saving: false
+    };
+
+    const annotationEditor = {
+      imageIndex: -1,
+      tool: 'arrow',
+      annotations: [],
+      initialAnnotations: [],
+      clearedAnnotations: null,
+      draft: null,
+      drawing: false,
+      pointerId: null,
+      triggerElement: null
     };
 
     const FIXED = {
       longEdge: 2000,
-      jpegQuality: 0.78,
       margin: 60,
       gap: 40,
       dateFont: 22,
+      titleFont: 26,
       portrait: { width: 1240, height: 1754, pdfW: 595.28, pdfH: 841.89 },
       landscape: { width: 1754, height: 1240, pdfW: 841.89, pdfH: 595.28 }
     };
 
-    function setStatus(msg) { els.status.textContent = msg; }
+    let statusTimer = null;
+    function setStatus(msg, tone = 'info', persistent = false) {
+      els.status.textContent = msg;
+      els.status.className = `status show${tone === 'info' ? '' : ` ${tone}`}`;
+      if (statusTimer) clearTimeout(statusTimer);
+      statusTimer = null;
+      if (!persistent) {
+        statusTimer = setTimeout(() => els.status.classList.remove('show'), 4200);
+      }
+    }
     function safeName(name) { return (name || '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[s])); }
     function baseFileName() {
-      const raw = (els.fileName && els.fileName.value ? els.fileName.value : 'a4_image_sheet_iphone').trim();
-      return (raw || 'a4_image_sheet_iphone').replace(/[\\/:*?"<>|]/g, '_');
+      const raw = (els.fileName && els.fileName.value ? els.fileName.value : 'a4_image_sheet').trim();
+      return (raw || 'a4_image_sheet').replace(/[\\/:*?"<>|]/g, '_');
     }
     function getPerPage() { return Math.max(1, Number(els.layout.value) || 1); }
     function getConfig() { return FIXED[els.orientation.value] || FIXED.portrait; }
+    function getJpegQuality() {
+      const quality = Number(els.jpegQuality.value);
+      return Math.min(0.95, Math.max(0.5, Number.isFinite(quality) ? quality : 0.78));
+    }
 
     function updatePageInfo() {
       const total = state.pages.length;
       els.pageInfo.textContent = total ? `${state.currentPage + 1} / ${total} ページ` : '0 / 0 ページ';
       els.btnPrev.disabled = total <= 1 || state.currentPage <= 0;
       els.btnNext.disabled = total <= 1 || state.currentPage >= total - 1;
-      els.btnPdf.disabled = !state.images.length;
-      els.btnJpegAll.disabled = !state.images.length;
+      els.btnPdf.disabled = !state.images.length || state.saving;
+      els.btnJpegCurrent.disabled = !state.images.length || state.saving;
+      els.btnClear.disabled = !state.images.length || state.saving;
     }
 
     function renderThumbs() {
+      const renderSkipped = () => state.skipped.length
+        ? `<div class="status warning">${state.skipped.map((item) => `<div><strong>${safeName(item.name)}</strong>：${safeName(item.reason)}</div>`).join('')}</div>`
+        : '';
       if (!state.images.length) {
-        const skippedInfo = state.skipped.length
-          ? `<div class="status">読込失敗：${state.skipped.map(s => safeName(s.name)).join(' / ')}</div>`
-          : '';
-        els.thumbList.innerHTML = '<div class="status">まだ画像がありません。</div>' + skippedInfo;
+        els.thumbList.innerHTML = '<div class="status">まだ画像がありません。</div>' + renderSkipped();
         return;
       }
       const perPage = getPerPage();
-      const skippedInfo = state.skipped.length
-        ? `<div class="status">読込失敗：${state.skipped.map(s => safeName(s.name)).join(' / ')}</div>`
-        : '';
       els.thumbList.innerHTML = state.images.map((item, idx) => {
         const page = Math.floor(idx / perPage) + 1;
         const slot = (idx % perPage) + 1;
+        const imageLabel = `画像${idx + 1} ${item.name}`;
         return `
-          <div class="thumb">
-            <img src="${item.thumbDataUrl}" alt="">
+          <div class="thumb${page - 1 === state.currentPage ? ' currentPage' : ''}" data-card-index="${idx}">
+            <img src="${item.thumbDataUrl}" alt="${safeName(imageLabel)}のサムネイル">
             <div class="thumbMeta">
-              <div><strong>${safeName(item.name)}</strong></div>
+              <div><strong>画像${idx + 1}：${safeName(item.name)}</strong></div>
               <div>${item.width} × ${item.height}px</div>
               <div>撮影日：${safeName(item.date)}</div>
               <div>回転：${item.rotation || 0}°</div>
+              <div>注釈：${(item.annotations || []).length}個</div>
               <div>ページ：${page} / 配置：${slot}</div>
+              <label>
+                シート上の見出し（画像左上）
+                <input class="thumbTitle" type="text" value="${safeName(item.title || '')}" maxlength="40" data-image-title data-index="${idx}" aria-label="${safeName(imageLabel)}のシート上の見出し" placeholder="例：外壁ひび割れ" />
+              </label>
               <div class="thumbActions">
-                <button type="button" class="thumbBtn" data-rotate="left" data-index="${idx}">↺ 左90°</button>
-                <button type="button" class="thumbBtn" data-rotate="right" data-index="${idx}">↻ 右90°</button>
+                <button type="button" class="thumbBtn" data-rotate="left" data-index="${idx}" aria-label="${safeName(imageLabel)}を左へ90度回転">↺ 左90°</button>
+                <button type="button" class="thumbBtn" data-rotate="right" data-index="${idx}" aria-label="${safeName(imageLabel)}を右へ90度回転">↻ 右90°</button>
+                <button type="button" class="thumbBtn primary wide" data-annotate data-index="${idx}" aria-label="${safeName(imageLabel)}の注釈を編集">注釈を編集</button>
+              </div>
+              <div class="thumbManage">
+                <button type="button" class="thumbBtn" data-image-action="show" data-index="${idx}">ページ${page}を表示</button>
+                <button type="button" class="thumbBtn danger" data-image-action="delete" data-index="${idx}" aria-label="${safeName(imageLabel)}を削除">この画像を削除</button>
+                <button type="button" class="thumbBtn" data-image-action="up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''} aria-label="${safeName(imageLabel)}を1つ上へ移動">↑ 上へ</button>
+                <button type="button" class="thumbBtn" data-image-action="down" data-index="${idx}" ${idx === state.images.length - 1 ? 'disabled' : ''} aria-label="${safeName(imageLabel)}を1つ下へ移動">↓ 下へ</button>
               </div>
             </div>
           </div>`;
-      }).join('') + skippedInfo;
+      }).join('') + renderSkipped();
     }
 
     function rebuildPages() {
@@ -410,20 +584,36 @@
       item.width = rotatedCanvas.width;
       item.height = rotatedCanvas.height;
       item.rotation = ((item.rotation || 0) + (dir === 'right' ? 90 : 270)) % 360;
+      item.annotations = (item.annotations || []).map((annotation) => rotateAnnotation(annotation, dir));
       item.thumbDataUrl = makeThumbDataUrl(rotatedCanvas);
+      state.currentPage = Math.floor(index / getPerPage());
       render();
       setStatus(`画像を回転しました：${item.name}`);
+    }
+
+    function rotateAnnotation(annotation, dir) {
+      const rotatePoint = (x, y) => dir === 'right'
+        ? { x: 1 - y, y: x }
+        : { x: y, y: 1 - x };
+      const start = rotatePoint(annotation.x1, annotation.y1);
+      const end = rotatePoint(annotation.x2, annotation.y2);
+      return { ...annotation, x1: start.x, y1: start.y, x2: end.x, y2: end.y };
     }
 
     async function prepareImage(file) {
       const lowerName = (file.name || '').toLowerCase();
       const lowerType = (file.type || '').toLowerCase();
-      if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif') || lowerType.includes('heic') || lowerType.includes('heif')) {
-        throw new Error('HEIC/HEIFは未対応です');
-      }
+      const isHeic = lowerName.endsWith('.heic') || lowerName.endsWith('.heif') || lowerType.includes('heic') || lowerType.includes('heif');
 
       const [dataUrl, buffer] = await Promise.all([readAsDataURL(file), readAsArrayBuffer(file)]);
-      const img = await loadImage(dataUrl);
+      let img;
+      try {
+        img = await loadImage(dataUrl);
+      } catch (error) {
+        throw new Error(isHeic
+          ? 'このブラウザではHEIC／HEIFを読み込めません。ブラウザを更新するかJPEGへ変換してください。'
+          : '画像形式を読み込めません。JPEG・PNG・WebPなどを選んでください。');
+      }
       const ratio = Math.min(1, FIXED.longEdge / Math.max(img.naturalWidth, img.naturalHeight));
       const width = Math.max(1, Math.round(img.naturalWidth * ratio));
       const height = Math.max(1, Math.round(img.naturalHeight * ratio));
@@ -445,6 +635,8 @@
         canvas,
         thumbDataUrl: makeThumbDataUrl(canvas),
         rotation: 0,
+        annotations: [],
+        title: '',
         date: parseExifDate(buffer) || formatDateFromFile(file)
       };
     }
@@ -530,7 +722,7 @@
       const boxH = fontSize + padY * 2;
       const x = rect.dx + rect.dw - boxW - 12 * scale;
       const y = rect.dy + rect.dh - boxH - 12 * scale;
-      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(x, y, boxW, boxH);
       ctx.strokeStyle = 'rgba(0,0,0,0.18)';
       ctx.lineWidth = 1 * scale;
@@ -539,6 +731,45 @@
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + padX, y + boxH / 2);
       ctx.textBaseline = 'alphabetic';
+    }
+
+    function ellipsizeText(ctx, text, maxWidth) {
+      const value = String(text || '').trim();
+      if (!value || ctx.measureText(value).width <= maxWidth) return value;
+      const chars = Array.from(value);
+      let fitted = '';
+      for (const char of chars) {
+        if (ctx.measureText(`${fitted}${char}…`).width > maxWidth) break;
+        fitted += char;
+      }
+      return fitted ? `${fitted}…` : '…';
+    }
+
+    function drawTitleLabel(ctx, text, rect, scale) {
+      const value = String(text || '').trim();
+      if (!value) return;
+      const padX = 14 * scale;
+      const padY = 9 * scale;
+      const inset = 12 * scale;
+      const fontSize = FIXED.titleFont * scale;
+      const maxTextWidth = Math.max(30 * scale, rect.dw - inset * 2 - padX * 2);
+      ctx.save();
+      ctx.font = `700 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+      const visibleText = ellipsizeText(ctx, value, maxTextWidth);
+      const textWidth = ctx.measureText(visibleText).width;
+      const boxWidth = textWidth + padX * 2;
+      const boxHeight = fontSize + padY * 2;
+      const x = rect.dx + inset;
+      const y = rect.dy + inset;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y, boxWidth, boxHeight);
+      ctx.strokeStyle = 'rgba(0,0,0,.24)';
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.strokeRect(x, y, boxWidth, boxHeight);
+      ctx.fillStyle = '#111827';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(visibleText, x + padX, y + boxHeight / 2);
+      ctx.restore();
     }
 
     function drawPlaceholder(ctx, box) {
@@ -565,6 +796,107 @@
       return { dx, dy, dw, dh };
     }
 
+    function annotationPath(ctx, annotation, rect) {
+      const x1 = rect.dx + annotation.x1 * rect.dw;
+      const y1 = rect.dy + annotation.y1 * rect.dh;
+      const x2 = rect.dx + annotation.x2 * rect.dw;
+      const y2 = rect.dy + annotation.y2 * rect.dh;
+
+      ctx.beginPath();
+      if (annotation.type === 'circle') {
+        const cx = (x1 + x2) / 2;
+        const cy = (y1 + y2) / 2;
+        const rx = Math.max(2, Math.abs(x2 - x1) / 2);
+        const ry = Math.max(2, Math.abs(y2 - y1) / 2);
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        return;
+      }
+
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const head = Math.max(14, Math.min(rect.dw, rect.dh) * 0.055);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
+    }
+
+    function wrapAnnotationText(ctx, text, maxWidth, maxLines = 3) {
+      const chars = Array.from(String(text || '').trim());
+      if (!chars.length) return [];
+      const lines = [];
+      let current = '';
+      for (let i = 0; i < chars.length; i++) {
+        const next = `${current}${chars[i]}`;
+        if (current && ctx.measureText(next).width > maxWidth) {
+          lines.push(current);
+          current = chars[i];
+          if (lines.length === maxLines - 1) {
+            const remaining = `${current}${chars.slice(i + 1).join('')}`;
+            lines.push(ellipsizeText(ctx, remaining, maxWidth));
+            return lines;
+          }
+        } else {
+          current = next;
+        }
+      }
+      if (current) lines.push(current);
+      return lines;
+    }
+
+    function drawCalloutBox(ctx, annotation, rect, strokeWidth) {
+      const text = String(annotation.text || '').trim();
+      if (!text) return;
+      const fontSize = Math.max(18, Math.min(rect.dw, rect.dh) * 0.032);
+      const paddingX = fontSize * 0.55;
+      const paddingY = fontSize * 0.38;
+      const lineHeight = fontSize * 1.24;
+      const inset = Math.max(4, strokeWidth);
+      const maxTextWidth = Math.max(fontSize * 4, rect.dw * 0.44);
+      ctx.font = `700 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+      const lines = wrapAnnotationText(ctx, text, maxTextWidth, 3);
+      const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
+      const boxWidth = Math.min(rect.dw - inset * 2, textWidth + paddingX * 2);
+      const boxHeight = lines.length * lineHeight + paddingY * 2;
+      const anchorX = rect.dx + annotation.x1 * rect.dw;
+      const anchorY = rect.dy + annotation.y1 * rect.dh;
+      const x = Math.min(rect.dx + rect.dw - boxWidth - inset, Math.max(rect.dx + inset, anchorX - boxWidth / 2));
+      const y = Math.min(rect.dy + rect.dh - boxHeight - inset, Math.max(rect.dy + inset, anchorY - boxHeight / 2));
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y, boxWidth, boxHeight);
+      ctx.strokeStyle = '#e11d2e';
+      ctx.lineWidth = Math.max(2, strokeWidth * 0.55);
+      ctx.strokeRect(x, y, boxWidth, boxHeight);
+      ctx.fillStyle = '#111827';
+      ctx.textBaseline = 'middle';
+      lines.forEach((line, index) => {
+        ctx.fillText(line, x + paddingX, y + paddingY + lineHeight * (index + 0.5));
+      });
+    }
+
+    function drawAnnotation(ctx, annotation, rect) {
+      const width = Math.max(4, Math.min(rect.dw, rect.dh) * 0.012);
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      annotationPath(ctx, annotation, rect);
+      ctx.strokeStyle = 'rgba(255,255,255,.94)';
+      ctx.lineWidth = width + Math.max(4, width * 0.75);
+      ctx.stroke();
+      annotationPath(ctx, annotation, rect);
+      ctx.strokeStyle = '#e11d2e';
+      ctx.lineWidth = width;
+      ctx.stroke();
+      if (annotation.type === 'callout') drawCalloutBox(ctx, annotation, rect, width);
+      ctx.restore();
+    }
+
+    function drawAnnotations(ctx, annotations, rect) {
+      (annotations || []).forEach((annotation) => drawAnnotation(ctx, annotation, rect));
+    }
+
     function drawPageToCanvas(canvas, pageIndex, scale) {
       const cfg = getConfig();
       canvas.width = Math.round(cfg.width * scale);
@@ -588,6 +920,8 @@
           return;
         }
         const rect = drawFitImage(ctx, item, box);
+        drawAnnotations(ctx, item.annotations, rect);
+        drawTitleLabel(ctx, item.title, rect, scale);
         drawDateLabel(ctx, item.date, rect, scale);
       });
       return canvas;
@@ -603,11 +937,16 @@
         canvas.height = cfg.height;
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '700 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('画像を追加すると、ここにA4プレビューが表示されます', canvas.width / 2, canvas.height / 2);
+        ctx.textAlign = 'start';
+        ctx.textBaseline = 'alphabetic';
         updatePageInfo();
         renderThumbs();
-        setStatus('画像を読み込んでください。');
+        setStatus('画像を追加してください。');
         return;
       }
       drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
@@ -659,26 +998,27 @@
         canvas.toBlob((blob) => {
           if (!blob) reject(new Error('JPEG生成失敗'));
           else resolve(blob);
-        }, 'image/jpeg', FIXED.jpegQuality);
+        }, 'image/jpeg', getJpegQuality());
       });
     }
 
+    function setSaving(active, type = '') {
+      state.saving = active;
+      els.btnPdf.textContent = active && type === 'pdf' ? 'PDF生成中…' : 'PDF保存（全ページ）';
+      els.btnJpegCurrent.textContent = active && type === 'jpeg' ? 'JPEG生成中…' : 'JPEG保存（表示中ページ）';
+      updatePageInfo();
+    }
 
-
-
-
-
-
-
-
-
-
-    async function saveAllJpegs() {
+    async function saveCurrentJpeg() {
+      if (state.saving) return;
       try {
         if (!state.pages.length) {
           setStatus('画像を読み込んでください。');
           return;
         }
+        setSaving(true, 'jpeg');
+        setStatus('JPEG生成中…', 'info', true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
         const canvas = document.createElement('canvas');
         drawPageToCanvas(canvas, state.currentPage, 1.5);
         const blob = await canvasToJpegBlob(canvas);
@@ -686,17 +1026,19 @@
         const file = new File([blob], filename, { type: 'image/jpeg' });
         const result = await shareFileOrFallback(file, `JPEGを表示しました。必要に応じて保存してください（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
         if (result.shared) {
-          setStatus(`JPEGを共有しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
+          setStatus(`JPEGを共有しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`, 'success');
           return;
         }
-        setStatus(result.message || `JPEGを保存しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`);
+        setStatus(result.message || `JPEGを保存しました（表示中 ${state.currentPage + 1} / ${state.pages.length} ページ）`, 'success');
       } catch (e) {
         if (isShareCancelled(e)) {
-          setStatus('共有をキャンセルしました。');
+          setStatus('共有をキャンセルしました。', 'warning');
           return;
         }
         console.error(e);
-        setStatus('JPEG保存に失敗しました。');
+        setStatus('JPEG保存に失敗しました。', 'error');
+      } finally {
+        setSaving(false);
       }
     }
 
@@ -771,16 +1113,20 @@
     }
 
     async function savePdf() {
+      if (state.saving) return;
       try {
         if (!state.pages.length) {
           setStatus('画像を読み込んでください。');
           return;
         }
+        setSaving(true, 'pdf');
         const pageImages = [];
         for (let i = 0; i < state.pages.length; i++) {
+          setStatus(`PDF生成中… ${i + 1} / ${state.pages.length}ページ`, 'info', true);
+          await new Promise((resolve) => setTimeout(resolve, 0));
           const canvas = document.createElement('canvas');
           drawPageToCanvas(canvas, i, 1.5);
-          const dataUrl = canvas.toDataURL('image/jpeg', FIXED.jpegQuality);
+          const dataUrl = canvas.toDataURL('image/jpeg', getJpegQuality());
           pageImages.push({
             width: canvas.width,
             height: canvas.height,
@@ -792,17 +1138,19 @@
         const file = new File([blob], filename, { type: 'application/pdf' });
         const result = await shareFileOrFallback(file, `PDFを表示しました。必要に応じて保存してください（全${state.pages.length}ページ）`);
         if (result.shared) {
-          setStatus('PDFを共有しました');
+          setStatus('PDFを共有しました。', 'success');
           return;
         }
-        setStatus(result.message || `PDFを保存しました（全${state.pages.length}ページ）`);
+        setStatus(result.message || `PDFを保存しました（全${state.pages.length}ページ）`, 'success');
       } catch (e) {
         if (isShareCancelled(e)) {
-          setStatus('共有をキャンセルしました。');
+          setStatus('共有をキャンセルしました。', 'warning');
           return;
         }
         console.error(e);
-        setStatus('PDF保存に失敗しました。');
+        setStatus('PDF保存に失敗しました。', 'error');
+      } finally {
+        setSaving(false);
       }
     }
 
@@ -813,7 +1161,8 @@
         return;
       }
 
-      setStatus(`画像を読み込み中です… 0 / ${list.length}`);
+      const previousCount = state.images.length;
+      setStatus(`画像を読み込み中です… 0 / ${list.length}`, 'info', true);
       const loaded = [];
       const skipped = [];
 
@@ -825,35 +1174,266 @@
           console.error(e);
           skipped.push({ name: list[i].name, reason: e && e.message ? e.message : '読込失敗' });
         }
-        setStatus(`画像を読み込み中です… ${i + 1} / ${list.length}`);
+        setStatus(`画像を読み込み中です… ${i + 1} / ${list.length}`, 'info', true);
       }
 
-      state.images = loaded;
+      state.images.push(...loaded);
       state.skipped = skipped;
-      state.currentPage = 0;
+      if (loaded.length) state.currentPage = Math.floor(previousCount / getPerPage());
+      els.fileInput.value = '';
       render();
 
       if (!loaded.length) {
-        setStatus('画像読込に失敗しました。対応形式の画像を選んでください。');
+        setStatus('画像読込に失敗しました。形式ごとの理由を画像一覧で確認してください。', 'error');
       } else if (skipped.length) {
-        setStatus(`読込完了：${loaded.length}枚 / スキップ：${skipped.length}枚`);
+        setStatus(`追加完了：${loaded.length}枚 / 読込失敗：${skipped.length}枚`, 'warning');
       } else {
-        setStatus(`読込完了：${loaded.length}枚`);
+        setStatus(`画像を${loaded.length}枚追加しました（合計${state.images.length}枚）。`, 'success');
       }
     }
 
     function clearAll() {
+      if (!state.images.length) return;
+      if (!window.confirm(`画像${state.images.length}枚と、タイトル・注釈をすべて削除します。元に戻せません。`)) return;
       state.images = [];
       state.pages = [];
       state.skipped = [];
       state.currentPage = 0;
       els.fileInput.value = '';
       render();
-      setStatus('画像をクリアしました。');
+      setStatus('すべての画像を削除しました。', 'success');
+    }
+
+    function syncThumbHighlights() {
+      const perPage = getPerPage();
+      els.thumbList.querySelectorAll('[data-card-index]').forEach((card) => {
+        const index = Number(card.dataset.cardIndex);
+        card.classList.toggle('currentPage', Math.floor(index / perPage) === state.currentPage);
+      });
+    }
+
+    function showImagePage(index, shouldScroll = true) {
+      if (!state.images[index]) return;
+      state.currentPage = Math.floor(index / getPerPage());
+      rebuildPages();
+      drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+      updatePageInfo();
+      syncThumbHighlights();
+      if (shouldScroll && els.previewPanel.scrollIntoView) {
+        els.previewPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function moveImage(index, direction) {
+      const target = index + direction;
+      if (!state.images[index] || target < 0 || target >= state.images.length) return;
+      const [item] = state.images.splice(index, 1);
+      state.images.splice(target, 0, item);
+      state.currentPage = Math.floor(target / getPerPage());
+      render();
+      setStatus(`${item.name}を${direction < 0 ? '上' : '下'}へ移動しました。`, 'success');
+    }
+
+    function deleteImageAt(index) {
+      const item = state.images[index];
+      if (!item) return;
+      if (!window.confirm(`${item.name}を削除します。元に戻せません。`)) return;
+      state.images.splice(index, 1);
+      state.currentPage = Math.min(Math.floor(index / getPerPage()), Math.max(0, Math.ceil(state.images.length / getPerPage()) - 1));
+      render();
+      setStatus(`${item.name}を削除しました。`, 'success');
+    }
+
+    function setAnnotationTool(tool) {
+      annotationEditor.tool = ['arrow', 'circle', 'callout'].includes(tool) ? tool : 'arrow';
+      els.annotationTools.forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.annotationTool === annotationEditor.tool));
+      });
+      const isCallout = annotationEditor.tool === 'callout';
+      els.annotationTextWrap.hidden = !isCallout;
+      els.annotationHelp.textContent = isCallout
+        ? 'テキストを入力し、テキストボックスを置く位置から矢印の先端へドラッグしてください。'
+        : annotationEditor.tool === 'circle'
+          ? '囲みたい範囲の端から端へドラッグしてください。'
+          : '矢印は始点から先端へドラッグしてください。';
+    }
+
+    function renderAnnotationEditor() {
+      const item = state.images[annotationEditor.imageIndex];
+      if (!item) return;
+      const canvas = els.annotationCanvas;
+      canvas.width = item.canvas.width;
+      canvas.height = item.canvas.height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(item.canvas, 0, 0);
+      const rect = { dx: 0, dy: 0, dw: canvas.width, dh: canvas.height };
+      drawAnnotations(ctx, annotationEditor.annotations, rect);
+      if (annotationEditor.draft) drawAnnotation(ctx, annotationEditor.draft, rect);
+      els.btnAnnotationUndo.disabled = !annotationEditor.annotations.length && !annotationEditor.clearedAnnotations;
+      els.btnAnnotationClear.disabled = !annotationEditor.annotations.length;
+    }
+
+    function openAnnotationEditor(index, triggerElement = null) {
+      const item = state.images[index];
+      if (!item) return;
+      showImagePage(index, false);
+      annotationEditor.imageIndex = index;
+      annotationEditor.triggerElement = triggerElement;
+      annotationEditor.annotations = (item.annotations || []).map((annotation) => ({ ...annotation }));
+      annotationEditor.initialAnnotations = annotationEditor.annotations.map((annotation) => ({ ...annotation }));
+      annotationEditor.clearedAnnotations = null;
+      annotationEditor.draft = null;
+      annotationEditor.drawing = false;
+      annotationEditor.pointerId = null;
+      els.annotationFileName.textContent = item.name;
+      els.annotationText.value = '';
+      setAnnotationTool(annotationEditor.tool);
+      els.annotationModal.hidden = false;
+      document.body.classList.add('modalOpen');
+      renderAnnotationEditor();
+      setTimeout(() => {
+        const selectedTool = els.annotationTools.find((button) => button.dataset.annotationTool === annotationEditor.tool);
+        if (selectedTool) selectedTool.focus();
+      }, 0);
+    }
+
+    function closeAnnotationEditor(applyChanges) {
+      const hasChanges = JSON.stringify(annotationEditor.annotations) !== JSON.stringify(annotationEditor.initialAnnotations);
+      if (!applyChanges && hasChanges && !window.confirm('編集中の注釈を破棄しますか？')) return;
+      if (applyChanges && annotationEditor.imageIndex >= 0) {
+        const item = state.images[annotationEditor.imageIndex];
+        if (item) item.annotations = annotationEditor.annotations.map((annotation) => ({ ...annotation }));
+      }
+      const editedIndex = annotationEditor.imageIndex;
+      const triggerElement = annotationEditor.triggerElement;
+      const changedItem = state.images[annotationEditor.imageIndex];
+      annotationEditor.imageIndex = -1;
+      annotationEditor.annotations = [];
+      annotationEditor.initialAnnotations = [];
+      annotationEditor.clearedAnnotations = null;
+      annotationEditor.draft = null;
+      annotationEditor.drawing = false;
+      annotationEditor.pointerId = null;
+      annotationEditor.triggerElement = null;
+      els.annotationModal.hidden = true;
+      document.body.classList.remove('modalOpen');
+      if (applyChanges) {
+        render();
+        setStatus(`注釈を反映しました：${changedItem ? changedItem.name : ''}`, 'success');
+      }
+      setTimeout(() => {
+        const nextTrigger = applyChanges
+          ? els.thumbList.querySelector(`[data-annotate][data-index="${editedIndex}"]`)
+          : triggerElement;
+        if (nextTrigger && nextTrigger.focus) nextTrigger.focus();
+      }, 0);
+    }
+
+    function getAnnotationPoint(event) {
+      const canvas = els.annotationCanvas;
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+        y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+      };
+    }
+
+    function startAnnotation(event) {
+      if (annotationEditor.imageIndex < 0 || !event.isPrimary) return;
+      const calloutText = els.annotationText.value.trim();
+      if (annotationEditor.tool === 'callout' && !calloutText) {
+        els.annotationHelp.textContent = '先にテキストボックスの内容を入力してください。';
+        els.annotationText.focus();
+        return;
+      }
+      const point = getAnnotationPoint(event);
+      annotationEditor.drawing = true;
+      annotationEditor.pointerId = event.pointerId;
+      annotationEditor.draft = {
+        type: annotationEditor.tool,
+        x1: point.x,
+        y1: point.y,
+        x2: point.x,
+        y2: point.y,
+        ...(annotationEditor.tool === 'callout' ? { text: calloutText } : {})
+      };
+      if (els.annotationCanvas.setPointerCapture) els.annotationCanvas.setPointerCapture(event.pointerId);
+      renderAnnotationEditor();
+    }
+
+    function moveAnnotation(event) {
+      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      const point = getAnnotationPoint(event);
+      annotationEditor.draft.x2 = point.x;
+      annotationEditor.draft.y2 = point.y;
+      renderAnnotationEditor();
+    }
+
+    function finishAnnotation(event) {
+      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      const draft = annotationEditor.draft;
+      const point = getAnnotationPoint(event);
+      draft.x2 = point.x;
+      draft.y2 = point.y;
+      const canvasRect = els.annotationCanvas.getBoundingClientRect();
+      const distance = Math.hypot(
+        (draft.x2 - draft.x1) * canvasRect.width,
+        (draft.y2 - draft.y1) * canvasRect.height
+      );
+      if (distance >= 8) {
+        annotationEditor.annotations.push(draft);
+        annotationEditor.clearedAnnotations = null;
+      }
+      annotationEditor.draft = null;
+      annotationEditor.drawing = false;
+      annotationEditor.pointerId = null;
+      renderAnnotationEditor();
+    }
+
+    function cancelAnnotation(event) {
+      if (!annotationEditor.drawing || event.pointerId !== annotationEditor.pointerId) return;
+      annotationEditor.draft = null;
+      annotationEditor.drawing = false;
+      annotationEditor.pointerId = null;
+      renderAnnotationEditor();
     }
 
     els.fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    els.thumbList.addEventListener('focusin', (e) => {
+      const titleInput = e.target.closest('[data-image-title]');
+      if (titleInput) showImagePage(Number(titleInput.dataset.index), false);
+    });
+    els.thumbList.addEventListener('input', (e) => {
+      const titleInput = e.target.closest('[data-image-title]');
+      if (!titleInput) return;
+      const item = state.images[Number(titleInput.dataset.index)];
+      if (!item) return;
+      item.title = titleInput.value.slice(0, 40);
+      if (state.pages.length) drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+    });
+    els.thumbList.addEventListener('change', (e) => {
+      const titleInput = e.target.closest('[data-image-title]');
+      if (!titleInput) return;
+      const item = state.images[Number(titleInput.dataset.index)];
+      setStatus(item && item.title ? `画像タイトルを反映しました：${item.title}` : '画像タイトルを削除しました。');
+    });
     els.thumbList.addEventListener('click', (e) => {
+      const actionButton = e.target.closest('[data-image-action]');
+      if (actionButton) {
+        const index = Number(actionButton.dataset.index);
+        if (actionButton.dataset.imageAction === 'show') showImagePage(index, true);
+        if (actionButton.dataset.imageAction === 'delete') deleteImageAt(index);
+        if (actionButton.dataset.imageAction === 'up') moveImage(index, -1);
+        if (actionButton.dataset.imageAction === 'down') moveImage(index, 1);
+        return;
+      }
+      const annotationButton = e.target.closest('[data-annotate]');
+      if (annotationButton) {
+        openAnnotationEditor(Number(annotationButton.dataset.index), annotationButton);
+        return;
+      }
       const btn = e.target.closest('[data-rotate]');
       if (!btn) return;
       const index = Number(btn.dataset.index);
@@ -861,7 +1441,7 @@
       rotateImageAt(index, dir);
     });
     els.btnClear.addEventListener('click', clearAll);
-    els.btnJpegAll.addEventListener('click', saveAllJpegs);
+    els.btnJpegCurrent.addEventListener('click', saveCurrentJpeg);
     els.btnPdf.addEventListener('click', savePdf);
     els.btnPrev.addEventListener('click', () => {
       if (state.currentPage > 0) {
@@ -875,11 +1455,65 @@
         render();
       }
     });
-    [els.orientation, els.layout, els.showDate].forEach((el) => {
-      el.addEventListener('change', () => {
-        state.currentPage = 0;
-        render();
-      });
+    els.annotationTools.forEach((button) => {
+      button.addEventListener('click', () => setAnnotationTool(button.dataset.annotationTool));
+    });
+    els.btnAnnotationUndo.addEventListener('click', () => {
+      if (annotationEditor.clearedAnnotations) {
+        annotationEditor.annotations = annotationEditor.clearedAnnotations;
+        annotationEditor.clearedAnnotations = null;
+      } else {
+        annotationEditor.annotations.pop();
+      }
+      renderAnnotationEditor();
+    });
+    els.btnAnnotationClear.addEventListener('click', () => {
+      if (!annotationEditor.annotations.length) return;
+      if (!window.confirm(`注釈${annotationEditor.annotations.length}個をすべて消しますか？「1つ戻す」で復元できます。`)) return;
+      annotationEditor.clearedAnnotations = annotationEditor.annotations.map((annotation) => ({ ...annotation }));
+      annotationEditor.annotations = [];
+      renderAnnotationEditor();
+    });
+    els.btnAnnotationCancel.addEventListener('click', () => closeAnnotationEditor(false));
+    els.btnAnnotationClose.addEventListener('click', () => closeAnnotationEditor(false));
+    els.btnAnnotationDone.addEventListener('click', () => closeAnnotationEditor(true));
+    els.annotationCanvas.addEventListener('pointerdown', startAnnotation);
+    els.annotationCanvas.addEventListener('pointermove', moveAnnotation);
+    els.annotationCanvas.addEventListener('pointerup', finishAnnotation);
+    els.annotationCanvas.addEventListener('pointercancel', cancelAnnotation);
+    document.addEventListener('keydown', (event) => {
+      if (els.annotationModal.hidden) return;
+      if (event.key === 'Escape') {
+        closeAnnotationEditor(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(els.annotationModal.querySelectorAll('button:not([disabled]), input:not([disabled])'))
+        .filter((element) => !element.closest('[hidden]'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    [els.orientation, els.showDate].forEach((el) => {
+      el.addEventListener('change', render);
+    });
+    let previousPerPage = getPerPage();
+    els.layout.addEventListener('change', () => {
+      const firstVisibleImage = state.currentPage * previousPerPage;
+      previousPerPage = getPerPage();
+      state.currentPage = Math.floor(firstVisibleImage / previousPerPage);
+      render();
+    });
+    els.jpegQuality.addEventListener('change', () => {
+      const label = els.jpegQuality.options[els.jpegQuality.selectedIndex].text;
+      setStatus(`画像圧縮を「${label}」に設定しました。PDFとJPEGの保存時に反映されます。`);
     });
 
     render();
