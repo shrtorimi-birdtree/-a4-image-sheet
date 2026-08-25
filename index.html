@@ -68,6 +68,9 @@
       padding:10px 12px;font-size:16px;background:#fff
     }
     .checkline{display:flex;align-items:center;gap:8px;font-size:14px}
+    .fieldHint{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+    .syncLine{margin:8px 0 0}
+    .saveHint{margin:8px 2px 0;font-size:12px;color:var(--muted);line-height:1.45;text-align:center}
     .thumbActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
     .thumbActions .wide{grid-column:1 / -1}
     .thumbManage{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb}
@@ -125,7 +128,8 @@
       .previewPanel{position:sticky;top:14px}
     }
     @media (max-width:899px){
-      body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+      :root{--mobile-save-space:136px;--mobile-status-bottom:130px}
+      body{padding-bottom:calc(var(--mobile-save-space) + env(safe-area-inset-bottom))}
       .wrap{grid-template-areas:"controls" "preview" "images" "save"}
       .savePanel{
         position:fixed;left:0;right:0;bottom:0;z-index:10;border-radius:18px 18px 0 0;
@@ -133,9 +137,10 @@
       }
       .savePanel button{font-size:14px;padding:10px 8px}
       #status{
-        position:fixed;left:14px;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:11;
+        position:fixed;left:14px;right:14px;bottom:calc(var(--mobile-status-bottom) + env(safe-area-inset-bottom));z-index:11;
         box-shadow:0 8px 24px rgba(16,24,40,.16);pointer-events:none
       }
+      .saveHint{font-size:11px;margin-top:6px}
       #status:not(.show){opacity:0;visibility:hidden}
     }
     @media (max-width:480px){
@@ -200,8 +205,18 @@
         </div>
 
         <div>
+          <label for="documentTitle">写真タイトル（PDF全ページ共通）</label>
+          <input id="documentTitle" type="text" maxlength="60" placeholder="例：＊＊＊邸＊＊＊工事完了写真" />
+          <p class="fieldHint">PDFの全ページ上部に表示します。複数ページでは右側にページ番号が入ります。</p>
+        </div>
+
+        <div>
           <label for="fileName">保存ファイル名</label>
           <input id="fileName" type="text" value="a4_image_sheet" maxlength="60" />
+          <label class="checkline syncLine">
+            <input id="syncFileName" type="checkbox" checked />
+            ファイル名を写真タイトルと連動する
+          </label>
         </div>
 
         <div id="status" class="status" role="status" aria-live="polite">画像を追加してください。</div>
@@ -215,7 +230,7 @@
     </section>
 
     <section id="previewPanel" class="panel previewPanel" aria-labelledby="previewHeading">
-      <h2 id="previewHeading">A4プレビュー</h2>
+      <h2 id="previewHeading">PDFプレビュー</h2>
       <div class="nav" style="margin-bottom:12px;">
         <button id="btnPrev" class="secondary" type="button">前ページ</button>
         <button id="btnNext" class="secondary" type="button">次ページ</button>
@@ -242,6 +257,7 @@
         <button id="btnPdf" type="button">PDF保存（全ページ）</button>
         <button id="btnJpegCurrent" class="secondary" type="button">JPEG保存（表示中ページ）</button>
       </div>
+      <p class="saveHint">写真タイトル・ページ番号はPDFのみ（JPEGには入りません）。</p>
     </section>
   </div>
 
@@ -287,6 +303,8 @@
       orientation: document.getElementById('orientation'),
       layout: document.getElementById('layout'),
       jpegQuality: document.getElementById('jpegQuality'),
+      documentTitle: document.getElementById('documentTitle'),
+      syncFileName: document.getElementById('syncFileName'),
       fileName: document.getElementById('fileName'),
       showDate: document.getElementById('showDate'),
       btnPdf: document.getElementById('btnPdf'),
@@ -346,9 +364,19 @@
       gap: 40,
       dateFont: 22,
       titleFont: 26,
+      documentHeaderHeight: 52,
+      documentHeaderGap: 20,
+      documentTitleFont: 32,
+      documentTitleMinFont: 22,
+      pageNumberFont: 24,
       portrait: { width: 1240, height: 1754, pdfW: 595.28, pdfH: 841.89 },
       landscape: { width: 1754, height: 1240, pdfW: 841.89, pdfH: 595.28 }
     };
+
+    const RENDER_PROFILE = Object.freeze({
+      PDF: 'pdf',
+      JPEG_LEGACY: 'jpeg-legacy'
+    });
 
     let statusTimer = null;
     function setStatus(msg, tone = 'info', persistent = false) {
@@ -364,6 +392,24 @@
     function baseFileName() {
       const raw = (els.fileName && els.fileName.value ? els.fileName.value : 'a4_image_sheet').trim();
       return (raw || 'a4_image_sheet').replace(/[\\/:*?"<>|]/g, '_');
+    }
+    function getDocumentTitle() {
+      const value = els.documentTitle ? els.documentTitle.value : '';
+      return String(value || '').trim().slice(0, 60);
+    }
+
+    function linkedFileNameValue() {
+      return getDocumentTitle() || 'a4_image_sheet';
+    }
+
+    function syncFileNameFromTitle() {
+      if (!els.syncFileName || !els.syncFileName.checked) return;
+      els.fileName.value = linkedFileNameValue();
+    }
+
+    function refreshPdfPreview() {
+      if (!state.pages.length) return;
+      drawPageToCanvas(els.previewCanvas, state.currentPage, 1, { profile: RENDER_PROFILE.PDF });
     }
     function getPerPage() { return Math.max(1, Number(els.layout.value) || 1); }
     function getConfig() { return FIXED[els.orientation.value] || FIXED.portrait; }
@@ -649,18 +695,21 @@
       };
     }
 
-    function getSingleBox(width, height) {
-      const m = FIXED.margin;
-      return { x: m, y: m, w: width - m * 2, h: height - m * 2 };
+    function getSingleBox(width, height, metrics) {
+      const m = metrics.margin;
+      const contentTop = m + metrics.headerHeight + metrics.headerGap;
+      return { x: m, y: contentTop, w: width - m * 2, h: height - contentTop - m };
     }
 
-    function getDoubleBoxes(width, height, orientation, items = []) {
-      const m = FIXED.margin;
-      const gap = FIXED.gap;
+    function getDoubleBoxes(width, height, orientation, items = [], metrics) {
+      const m = metrics.margin;
+      const gap = metrics.gap;
+      const contentTop = m + metrics.headerHeight + metrics.headerGap;
+      const contentBottom = height - m;
 
       if (orientation === 'portrait') {
         const fullW = width - m * 2;
-        const totalH = height - m * 2 - gap;
+        const totalH = contentBottom - contentTop - gap;
 
         const itemA = items[0];
         const itemB = items[1];
@@ -677,19 +726,19 @@
           if (boxH2 < minH) { boxH2 = minH; boxH1 = totalH - boxH2; }
 
           return [
-            { x: m, y: m, w: fullW, h: boxH1 },
-            { x: m, y: m + boxH1 + gap, w: fullW, h: boxH2 }
+            { x: m, y: contentTop, w: fullW, h: boxH1 },
+            { x: m, y: contentTop + boxH1 + gap, w: fullW, h: boxH2 }
           ];
         }
 
         const boxH = Math.floor(totalH / 2);
         return [
-          { x: m, y: m, w: fullW, h: boxH },
-          { x: m, y: m + boxH + gap, w: fullW, h: totalH - boxH }
+          { x: m, y: contentTop, w: fullW, h: boxH },
+          { x: m, y: contentTop + boxH + gap, w: fullW, h: totalH - boxH }
         ];
       }
 
-      const fullH = height - m * 2;
+      const fullH = contentBottom - contentTop;
       const totalW = width - m * 2 - gap;
 
       const itemA = items[0];
@@ -707,15 +756,15 @@
         if (boxW2 < minW) { boxW2 = minW; boxW1 = totalW - boxW2; }
 
         return [
-          { x: m, y: m, w: boxW1, h: fullH },
-          { x: m + boxW1 + gap, y: m, w: boxW2, h: fullH }
+          { x: m, y: contentTop, w: boxW1, h: fullH },
+          { x: m + boxW1 + gap, y: contentTop, w: boxW2, h: fullH }
         ];
       }
 
       const boxW = Math.floor(totalW / 2);
       return [
-        { x: m, y: m, w: boxW, h: fullH },
-        { x: m + boxW + gap, y: m, w: totalW - boxW, h: fullH }
+        { x: m, y: contentTop, w: boxW, h: fullH },
+        { x: m + boxW + gap, y: contentTop, w: totalW - boxW, h: fullH }
       ];
     }
 
@@ -751,6 +800,67 @@
         fitted += char;
       }
       return fitted ? `${fitted}…` : '…';
+    }
+
+    function createRenderMetrics(scale, profile, documentTitle, totalPages) {
+      const isPdf = profile === RENDER_PROFILE.PDF;
+      const metricScale = isPdf ? scale : 1;
+      const title = String(documentTitle || '').trim().slice(0, 60);
+      const pageCount = Math.max(0, Number(totalPages) || 0);
+      const hasHeader = isPdf && Boolean(title || pageCount > 1);
+      return {
+        profile,
+        scale,
+        margin: FIXED.margin * metricScale,
+        gap: FIXED.gap * metricScale,
+        headerHeight: hasHeader ? FIXED.documentHeaderHeight * scale : 0,
+        headerGap: hasHeader ? FIXED.documentHeaderGap * scale : 0,
+        hasHeader,
+        documentTitle: title,
+        totalPages: pageCount,
+        metricScale
+      };
+    }
+
+    function fitDocumentTitle(ctx, text, maxWidth, scale) {
+      let baseFont = FIXED.documentTitleFont;
+      while (baseFont > FIXED.documentTitleMinFont) {
+        ctx.font = `700 ${baseFont * scale}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+        if (ctx.measureText(text).width <= maxWidth) break;
+        baseFont -= 1;
+      }
+      ctx.font = `700 ${baseFont * scale}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+      return {
+        fontSize: baseFont * scale,
+        text: ellipsizeText(ctx, text, maxWidth)
+      };
+    }
+
+    function drawDocumentHeader(ctx, canvasWidth, metrics, pageIndex) {
+      if (!metrics.hasHeader) return;
+      const pageLabel = metrics.totalPages > 1 ? `${pageIndex + 1}/${metrics.totalPages}` : '';
+      const centerY = metrics.margin + metrics.headerHeight / 2;
+      const rightX = canvasWidth - metrics.margin;
+      const textGap = 24 * metrics.scale;
+
+      ctx.save();
+      ctx.fillStyle = '#111827';
+      ctx.textBaseline = 'middle';
+      let pageLabelWidth = 0;
+      if (pageLabel) {
+        ctx.font = `600 ${FIXED.pageNumberFont * metrics.scale}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+        pageLabelWidth = ctx.measureText(pageLabel).width;
+        ctx.textAlign = 'right';
+        ctx.fillText(pageLabel, rightX, centerY);
+      }
+      if (metrics.documentTitle) {
+        const maxTitleWidth = Math.max(0, canvasWidth - metrics.margin * 2 - pageLabelWidth - (pageLabel ? textGap : 0));
+        const fitted = fitDocumentTitle(ctx, metrics.documentTitle, maxTitleWidth, metrics.scale);
+        ctx.font = `700 ${fitted.fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText(fitted.text, metrics.margin, centerY);
+      }
+      ctx.restore();
     }
 
     function drawTitleLabel(ctx, text, rect, scale) {
@@ -804,7 +914,7 @@
       return { dx, dy, dw, dh };
     }
 
-    function annotationPath(ctx, annotation, rect) {
+    function annotationPath(ctx, annotation, rect, metricScale = 1) {
       const x1 = rect.dx + annotation.x1 * rect.dw;
       const y1 = rect.dy + annotation.y1 * rect.dh;
       const x2 = rect.dx + annotation.x2 * rect.dw;
@@ -814,14 +924,14 @@
       if (annotation.type === 'circle') {
         const cx = (x1 + x2) / 2;
         const cy = (y1 + y2) / 2;
-        const rx = Math.max(2, Math.abs(x2 - x1) / 2);
-        const ry = Math.max(2, Math.abs(y2 - y1) / 2);
+        const rx = Math.max(2 * metricScale, Math.abs(x2 - x1) / 2);
+        const ry = Math.max(2 * metricScale, Math.abs(y2 - y1) / 2);
         ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
         return;
       }
 
       const angle = Math.atan2(y2 - y1, x2 - x1);
-      const head = Math.max(14, Math.min(rect.dw, rect.dh) * 0.055);
+      const head = Math.max(14 * metricScale, Math.min(rect.dw, rect.dh) * 0.055);
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.moveTo(x2, y2);
@@ -853,14 +963,14 @@
       return lines;
     }
 
-    function getCalloutBoxGeometry(ctx, annotation, rect, strokeWidth) {
+    function getCalloutBoxGeometry(ctx, annotation, rect, strokeWidth, metricScale = 1) {
       const text = String(annotation.text || '').trim();
       if (!text) return null;
-      const fontSize = Math.max(18, Math.min(rect.dw, rect.dh) * 0.032);
+      const fontSize = Math.max(18 * metricScale, Math.min(rect.dw, rect.dh) * 0.032);
       const paddingX = fontSize * 0.55;
       const paddingY = fontSize * 0.38;
       const lineHeight = fontSize * 1.24;
-      const inset = Math.max(4, strokeWidth);
+      const inset = Math.max(4 * metricScale, strokeWidth);
       const maxTextWidth = Math.max(fontSize * 4, rect.dw * 0.44);
       ctx.font = `700 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif`;
       const lines = wrapAnnotationText(ctx, text, maxTextWidth, 3);
@@ -875,15 +985,15 @@
       return { x, y, width: boxWidth, height: boxHeight, lines, paddingX, paddingY, lineHeight };
     }
 
-    function drawCalloutBox(ctx, annotation, rect, strokeWidth) {
-      const geometry = getCalloutBoxGeometry(ctx, annotation, rect, strokeWidth);
+    function drawCalloutBox(ctx, annotation, rect, strokeWidth, metricScale = 1) {
+      const geometry = getCalloutBoxGeometry(ctx, annotation, rect, strokeWidth, metricScale);
       if (!geometry) return;
       const { x, y, width, height, lines, paddingX, paddingY, lineHeight } = geometry;
 
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(x, y, width, height);
       ctx.strokeStyle = '#e11d2e';
-      ctx.lineWidth = Math.max(2, strokeWidth * 0.55);
+      ctx.lineWidth = Math.max(2 * metricScale, strokeWidth * 0.55);
       ctx.strokeRect(x, y, width, height);
       ctx.fillStyle = '#111827';
       ctx.textBaseline = 'middle';
@@ -965,29 +1075,37 @@
       return distanceToSegment(px, py, x1, y1, x2, y2) <= tolerance;
     }
 
-    function drawAnnotation(ctx, annotation, rect) {
-      const width = Math.max(4, Math.min(rect.dw, rect.dh) * 0.012);
+    function drawAnnotation(ctx, annotation, rect, metricScale = 1) {
+      const width = Math.max(4 * metricScale, Math.min(rect.dw, rect.dh) * 0.012);
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      annotationPath(ctx, annotation, rect);
+      annotationPath(ctx, annotation, rect, metricScale);
       ctx.strokeStyle = 'rgba(255,255,255,.94)';
-      ctx.lineWidth = width + Math.max(4, width * 0.75);
+      ctx.lineWidth = width + Math.max(4 * metricScale, width * 0.75);
       ctx.stroke();
-      annotationPath(ctx, annotation, rect);
+      annotationPath(ctx, annotation, rect, metricScale);
       ctx.strokeStyle = '#e11d2e';
       ctx.lineWidth = width;
       ctx.stroke();
-      if (annotation.type === 'callout') drawCalloutBox(ctx, annotation, rect, width);
+      if (annotation.type === 'callout') drawCalloutBox(ctx, annotation, rect, width, metricScale);
       ctx.restore();
     }
 
-    function drawAnnotations(ctx, annotations, rect) {
-      (annotations || []).forEach((annotation) => drawAnnotation(ctx, annotation, rect));
+    function drawAnnotations(ctx, annotations, rect, metricScale = 1) {
+      (annotations || []).forEach((annotation) => drawAnnotation(ctx, annotation, rect, metricScale));
     }
 
-    function drawPageToCanvas(canvas, pageIndex, scale) {
+    function drawPageToCanvas(canvas, pageIndex, scale, options = {}) {
       const cfg = getConfig();
+      const profile = options.profile === RENDER_PROFILE.JPEG_LEGACY ? RENDER_PROFILE.JPEG_LEGACY : RENDER_PROFILE.PDF;
+      const documentTitle = Object.prototype.hasOwnProperty.call(options, 'documentTitle')
+        ? options.documentTitle
+        : getDocumentTitle();
+      const totalPages = Number.isFinite(options.totalPages)
+        ? Math.max(0, options.totalPages)
+        : state.pages.length;
+      const metrics = createRenderMetrics(scale, profile, documentTitle, totalPages);
       canvas.width = Math.round(cfg.width * scale);
       canvas.height = Math.round(cfg.height * scale);
       const ctx = canvas.getContext('2d', { alpha: false });
@@ -995,12 +1113,13 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      drawDocumentHeader(ctx, canvas.width, metrics, pageIndex);
 
       const page = state.pages[pageIndex] || [];
       const perPage = getPerPage();
       const boxes = perPage === 1
-        ? [getSingleBox(canvas.width, canvas.height)]
-        : getDoubleBoxes(canvas.width, canvas.height, els.orientation.value, page);
+        ? [getSingleBox(canvas.width, canvas.height, metrics)]
+        : getDoubleBoxes(canvas.width, canvas.height, els.orientation.value, page, metrics);
 
       boxes.forEach((box, idx) => {
         const item = page[idx];
@@ -1009,7 +1128,7 @@
           return;
         }
         const rect = drawFitImage(ctx, item, box);
-        drawAnnotations(ctx, item.annotations, rect);
+        drawAnnotations(ctx, item.annotations, rect, metrics.metricScale);
         drawTitleLabel(ctx, item.title, rect, scale);
         drawDateLabel(ctx, item.date, rect, scale);
       });
@@ -1030,7 +1149,7 @@
         ctx.font = '700 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('画像を追加すると、ここにA4プレビューが表示されます', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('画像を追加すると、ここにPDFプレビューが表示されます', canvas.width / 2, canvas.height / 2);
         ctx.textAlign = 'start';
         ctx.textBaseline = 'alphabetic';
         updatePageInfo();
@@ -1038,7 +1157,7 @@
         setStatus('画像を追加してください。');
         return;
       }
-      drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+      drawPageToCanvas(els.previewCanvas, state.currentPage, 1, { profile: RENDER_PROFILE.PDF });
       updatePageInfo();
       renderThumbs();
       setStatus(`プレビュー更新済み（画像${state.images.length}枚 / ${state.pages.length}ページ）`);
@@ -1109,7 +1228,7 @@
         setStatus('JPEG生成中…', 'info', true);
         await new Promise((resolve) => setTimeout(resolve, 0));
         const canvas = document.createElement('canvas');
-        drawPageToCanvas(canvas, state.currentPage, 1.5);
+        drawPageToCanvas(canvas, state.currentPage, 1.5, { profile: RENDER_PROFILE.JPEG_LEGACY });
         const blob = await canvasToJpegBlob(canvas);
         const filename = `${baseFileName()}_${String(state.currentPage + 1).padStart(2, '0')}.jpg`;
         const file = new File([blob], filename, { type: 'image/jpeg' });
@@ -1209,12 +1328,19 @@
           return;
         }
         setSaving(true, 'pdf');
+        const pdfDocumentTitle = getDocumentTitle();
+        const pdfTotalPages = state.pages.length;
+        const pdfBaseFileName = baseFileName();
         const pageImages = [];
-        for (let i = 0; i < state.pages.length; i++) {
-          setStatus(`PDF生成中… ${i + 1} / ${state.pages.length}ページ`, 'info', true);
+        for (let i = 0; i < pdfTotalPages; i++) {
+          setStatus(`PDF生成中… ${i + 1} / ${pdfTotalPages}ページ`, 'info', true);
           await new Promise((resolve) => setTimeout(resolve, 0));
           const canvas = document.createElement('canvas');
-          drawPageToCanvas(canvas, i, 1.5);
+          drawPageToCanvas(canvas, i, 1.5, {
+            profile: RENDER_PROFILE.PDF,
+            documentTitle: pdfDocumentTitle,
+            totalPages: pdfTotalPages
+          });
           const dataUrl = canvas.toDataURL('image/jpeg', getJpegQuality());
           pageImages.push({
             width: canvas.width,
@@ -1223,14 +1349,14 @@
           });
         }
         const blob = buildPdf(pageImages);
-        const filename = `${baseFileName()}.pdf`;
+        const filename = `${pdfBaseFileName}.pdf`;
         const file = new File([blob], filename, { type: 'application/pdf' });
-        const result = await shareFileOrFallback(file, `PDFを表示しました。必要に応じて保存してください（全${state.pages.length}ページ）`);
+        const result = await shareFileOrFallback(file, `PDFを表示しました。必要に応じて保存してください（全${pdfTotalPages}ページ）`);
         if (result.shared) {
           setStatus('PDFを共有しました。', 'success');
           return;
         }
-        setStatus(result.message || `PDFを保存しました（全${state.pages.length}ページ）`, 'success');
+        setStatus(result.message || `PDFを保存しました（全${pdfTotalPages}ページ）`, 'success');
       } catch (e) {
         if (isShareCancelled(e)) {
           setStatus('共有をキャンセルしました。', 'warning');
@@ -1283,7 +1409,7 @@
 
     function clearAll() {
       if (!state.images.length) return;
-      if (!window.confirm(`画像${state.images.length}枚と、タイトル・注釈をすべて削除します。元に戻せません。`)) return;
+      if (!window.confirm(`画像${state.images.length}枚と、画像ごとの見出し・注釈をすべて削除します。元に戻せません。`)) return;
       state.images = [];
       state.pages = [];
       state.skipped = [];
@@ -1305,7 +1431,7 @@
       if (!state.images[index]) return;
       state.currentPage = Math.floor(index / getPerPage());
       rebuildPages();
-      drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+      drawPageToCanvas(els.previewCanvas, state.currentPage, 1, { profile: RENDER_PROFILE.PDF });
       updatePageInfo();
       syncThumbHighlights();
       if (shouldScroll && els.previewPanel.scrollIntoView) {
@@ -1641,6 +1767,22 @@
       renderAnnotationEditor();
     }
 
+    els.documentTitle.addEventListener('input', () => {
+      syncFileNameFromTitle();
+      refreshPdfPreview();
+    });
+    els.fileName.addEventListener('input', () => {
+      if (els.syncFileName.checked) els.syncFileName.checked = false;
+    });
+    els.syncFileName.addEventListener('change', () => {
+      if (els.syncFileName.checked) {
+        syncFileNameFromTitle();
+        setStatus('写真タイトルとファイル名を連動しました。');
+        return;
+      }
+      setStatus('ファイル名の連動を解除しました。');
+    });
+
     els.fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
     els.thumbList.addEventListener('focusin', (e) => {
       const titleInput = e.target.closest('[data-image-title]');
@@ -1652,7 +1794,9 @@
       const item = state.images[Number(titleInput.dataset.index)];
       if (!item) return;
       item.title = titleInput.value.slice(0, 40);
-      if (state.pages.length) drawPageToCanvas(els.previewCanvas, state.currentPage, 1);
+      if (state.pages.length) {
+        drawPageToCanvas(els.previewCanvas, state.currentPage, 1, { profile: RENDER_PROFILE.PDF });
+      }
     });
     els.thumbList.addEventListener('change', (e) => {
       const titleInput = e.target.closest('[data-image-title]');
